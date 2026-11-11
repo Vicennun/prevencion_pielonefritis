@@ -9,6 +9,8 @@ export default function PatientSidebar({ activeTab = 'inicio' }) {
     { id: 'formulario', label: 'Formulario preliminar', href: '#paciente/formulario' },
     { id: 'prevencion', label: 'Prevención', href: '#paciente/prevencion' },
     { id: 'recordatorios', label: 'Recordatorios', href: '#paciente/recordatorios' },
+    { id: 'tratamiento-activo', label: 'Tratamiento en curso', href: '#paciente/tratamiento-activo' },
+    { id: 'examenes', label: 'Mis Exámenes', href: '#paciente/examenes' }
   ];
 
   return (
@@ -16,10 +18,10 @@ export default function PatientSidebar({ activeTab = 'inicio' }) {
       {/* Branding */}
       <div className="px-2 py-1 flex justify-start items-center gap-2.5 mb-2">
         <div className="w-9 h-9 bg-teal-700 rounded-[10px] flex justify-center items-center">
-          <span className="text-white text-lg font-bold font-['Inter']">S</span>
+          <span className="text-white text-lg font-bold font-['Inter']">N</span>
         </div>
         <span className="text-slate-900 text-base font-bold font-['Inter']">
-          Seguimiento Salud
+          CERO - NEFRITIS
         </span>
       </div>
 

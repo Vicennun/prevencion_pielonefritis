@@ -15,6 +15,8 @@ import PatientAtenciones from './components/PatientAtenciones';
 import PatientFormulario from './components/PatientFormulario';
 import PatientPrevencion from './components/PatientPrevencion';
 import PatientRecordatorios from './components/PatientRecordatorios';
+import PatientTratamientoActivo from './components/PatientTratamientoActivo'; // <-- Arriba
+import PatientExamenes from './components/PatientExamenes';
 
 // Componentes Profesional
 import ProSidebar from './components/ProSidebar';
@@ -26,6 +28,8 @@ import ProDetallePaciente from './components/ProDetallePaciente';
 import ProMensajes from './components/ProMensajes';
 import ProPrevenciones from './components/ProPrevenciones';
 import ProRecordatorios from './components/ProRecordatorios';
+import ProSeguimientoActivo from './components/ProSeguimientoActivo';
+import ProRevisionExamen from './components/ProRevisionExamen';
 
 export default function App() {
   // Leemos el hash actual de la URL o por defecto cargamos '#inicio'
@@ -67,6 +71,14 @@ export default function App() {
       case '#paciente/recordatorios':
         patientContent = <PatientRecordatorios />;
         activeTab = 'recordatorios';
+        break;
+      case '#paciente/tratamiento-activo':
+        patientContent = <PatientTratamientoActivo />;
+        activeTab = 'tratamiento-activo';
+        break;
+      case '#paciente/examenes':
+        patientContent = <PatientExamenes />;
+        activeTab = 'examenes';
         break;
       case '#paciente':
       default:
@@ -120,6 +132,14 @@ export default function App() {
       case '#profesional/recordatorios':       // <-- ÚLTIMA RUTA!
         proContent = <ProRecordatorios />;
         activeTab = 'recordatorios';
+        break;
+      case '#profesional/seguimiento-activo':   // <-- NUEVA RUTA
+        proContent = <ProSeguimientoActivo />;
+        activeTab = 'seguimiento-activo';               // <-- Mantiene el sidebar en pacientes
+        break;
+      case '#profesional/revision-examen':
+        proContent = <ProRevisionExamen />;
+        activeTab = 'seguimiento-activo'; // Mantiene iluminado el menú actual
         break;
       case '#profesional':
       default:

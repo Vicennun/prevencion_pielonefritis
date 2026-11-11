@@ -5,6 +5,10 @@ export default function ProSidebar({ activeTab = 'inicio' }) {
     { id: 'inicio', label: 'Inicio', href: '#profesional' },
     { id: 'historial', label: 'Historial de atenciones', href: '#profesional/historial' },
     { id: 'pacientes', label: 'Lista de pacientes', href: '#profesional/pacientes' },
+    
+    // Nuevo enlace directo al Módulo de Seguimiento / Semáforo
+    { id: 'seguimiento-activo', label: 'Monitor clínico', href: '#profesional/seguimiento-activo' },
+    
     { id: 'mensajes', label: 'Mensajes', href: '#profesional/mensajes' },
     { id: 'prevenciones', label: 'Lista de prevenciones', href: '#profesional/prevenciones' },
     { id: 'recordatorios', label: 'Recordatorios', href: '#profesional/recordatorios' },
@@ -16,10 +20,10 @@ export default function ProSidebar({ activeTab = 'inicio' }) {
       {/* Branding */}
       <div className="px-2 py-1 flex justify-start items-center gap-2.5 mb-2">
         <div className="w-9 h-9 bg-red-700 rounded-[10px] flex justify-center items-center">
-          <span className="text-white text-lg font-bold font-['Inter']">S</span>
+          <span className="text-white text-lg font-bold font-['Inter']">N</span>
         </div>
         <span className="text-red-700 text-base font-bold font-['Inter']">
-          Seguimiento Salud
+          CERO - NEFRITIS
         </span>
       </div>
 
