@@ -5,14 +5,27 @@ export default function ProSidebar({ activeTab = 'inicio' }) {
     { id: 'inicio', label: 'Inicio', href: '#profesional' },
     { id: 'historial', label: 'Historial de atenciones', href: '#profesional/historial' },
     { id: 'pacientes', label: 'Lista de pacientes', href: '#profesional/pacientes' },
-    
-    // Nuevo enlace directo al Módulo de Seguimiento / Semáforo
     { id: 'seguimiento-activo', label: 'Monitor clínico', href: '#profesional/seguimiento-activo' },
-    
     { id: 'mensajes', label: 'Mensajes', href: '#profesional/mensajes' },
     { id: 'prevenciones', label: 'Lista de prevenciones', href: '#profesional/prevenciones' },
     { id: 'recordatorios', label: 'Recordatorios', href: '#profesional/recordatorios' },
   ];
+
+  const storedUser = JSON.parse(localStorage.getItem('ceroNefritisUser') || '{}');
+  const proName = storedUser.nombreCompleto || 'Freddy Turbina';
+  const proSpec = storedUser.especialidad || 'Médico Cirujano';
+  const proInitials = proName
+    .replace(/^(Dr\.|Dra\.)\s*/i, '')
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
+  const handleLogout = () => {
+    localStorage.removeItem('ceroNefritisUser');
+    window.location.hash = '#inicio';
+  };
 
   return (
     <aside className="w-full lg:w-64 min-h-screen px-4 py-6 bg-zinc-100 flex flex-col justify-start items-start gap-1.5 border-r border-zinc-300 shrink-0">
@@ -55,13 +68,17 @@ export default function ProSidebar({ activeTab = 'inicio' }) {
       </nav>
 
       {/* Perfil del Profesional */}
-      <div className="w-full px-2 py-3 flex justify-start items-center gap-2.5 mt-auto hover:bg-zinc-200 rounded-xl cursor-pointer transition-colors">
+      <div 
+        onClick={handleLogout}
+        title="Haz clic para cerrar sesión"
+        className="w-full px-2 py-3 flex justify-start items-center gap-2.5 mt-auto hover:bg-zinc-200 rounded-xl cursor-pointer transition-colors"
+      >
         <div className="w-9 h-9 bg-red-100 rounded-2xl flex justify-center items-center shrink-0">
-          <span className="text-red-700 text-xs font-semibold font-['Inter']">FT</span>
+          <span className="text-red-700 text-xs font-semibold font-['Inter']">{proInitials}</span>
         </div>
         <div className="flex flex-col justify-start items-start gap-0.5 overflow-hidden">
-          <span className="text-red-700 text-xs font-semibold font-['Inter'] truncate w-full">Freddy Turbina</span>
-          <span className="text-slate-500 text-xs font-normal font-['Inter'] truncate w-full">Médico Cirujano</span>
+          <span className="text-red-700 text-xs font-semibold font-['Inter'] truncate w-full">{proName}</span>
+          <span className="text-slate-500 text-xs font-normal font-['Inter'] truncate w-full">{proSpec} · Salir</span>
         </div>
       </div>
     </aside>

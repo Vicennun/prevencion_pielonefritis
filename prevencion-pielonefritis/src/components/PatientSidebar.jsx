@@ -1,7 +1,6 @@
 import React from 'react';
 
 export default function PatientSidebar({ activeTab = 'inicio' }) {
-  // Agregamos la propiedad 'href' a cada item apuntando a sus rutas
   const menuItems = [
     { id: 'inicio', label: 'Inicio', href: '#paciente' },
     { id: 'atenciones', label: 'Mis atenciones', href: '#paciente/atenciones' },
@@ -12,6 +11,15 @@ export default function PatientSidebar({ activeTab = 'inicio' }) {
     { id: 'tratamiento-activo', label: 'Tratamiento en curso', href: '#paciente/tratamiento-activo' },
     { id: 'examenes', label: 'Mis Exámenes', href: '#paciente/examenes' }
   ];
+
+  const storedUser = JSON.parse(localStorage.getItem('ceroNefritisUser') || '{}');
+  const userName = storedUser.nombreCompleto || 'Camila Soto';
+  const initials = userName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+
+  const handleLogout = () => {
+    localStorage.removeItem('ceroNefritisUser');
+    window.location.hash = '#inicio';
+  };
 
   return (
     <aside className="w-full lg:w-64 min-h-screen px-4 py-6 bg-white flex flex-col justify-start items-start gap-1.5 border-r border-slate-200 shrink-0">
@@ -31,7 +39,7 @@ export default function PatientSidebar({ activeTab = 'inicio' }) {
         </span>
       </div>
 
-      {/* Navegación (Ahora con etiquetas <a>) */}
+      {/* Navegación */}
       <nav className="flex-1 w-full flex flex-col gap-1.5">
         {menuItems.map((item) => {
           const isActive = activeTab === item.id;
@@ -52,14 +60,18 @@ export default function PatientSidebar({ activeTab = 'inicio' }) {
         })}
       </nav>
 
-      {/* Perfil del Usuario */}
-      <div className="w-full px-2 py-3 flex justify-start items-center gap-2.5 mt-auto hover:bg-slate-50 rounded-xl cursor-pointer transition-colors">
+      {/* Perfil del Usuario (con cierre de sesión al hacer clic) */}
+      <div 
+        onClick={handleLogout}
+        title="Haz clic para cerrar sesión"
+        className="w-full px-2 py-3 flex justify-start items-center gap-2.5 mt-auto hover:bg-slate-50 rounded-xl cursor-pointer transition-colors"
+      >
         <div className="w-9 h-9 bg-teal-100 rounded-2xl flex justify-center items-center">
-          <span className="text-teal-800 text-xs font-semibold font-['Inter']">CS</span>
+          <span className="text-teal-800 text-xs font-semibold font-['Inter']">{initials}</span>
         </div>
         <div className="flex flex-col justify-start items-start gap-0.5">
-          <span className="text-slate-900 text-xs font-semibold font-['Inter']">Camila Soto</span>
-          <span className="text-slate-500 text-xs font-normal font-['Inter']">Paciente</span>
+          <span className="text-slate-900 text-xs font-semibold font-['Inter']">{userName}</span>
+          <span className="text-slate-500 text-xs font-normal font-['Inter']">Paciente · Salir</span>
         </div>
       </div>
     </aside>

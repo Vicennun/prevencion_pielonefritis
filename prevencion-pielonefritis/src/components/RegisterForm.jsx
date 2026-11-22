@@ -1,124 +1,61 @@
 import React, { useState } from 'react';
 import RoleSelector from './RoleSelector';
 import InputField from './InputField';
-
-const DEMO_USERS = [
-  {
-    name: 'Camila Soto',
-    role: 'paciente',
-    email: 'camila.soto@salud.cl',
-    password: 'Camila2026!',
-    hash: '#paciente',
-  },
-  {
-    name: 'Freddy Turbina',
-    role: 'profesional',
-    email: 'freddy.turbina@salud.cl',
-    password: 'Freddy2026!',
-    hash: '#profesional',
-  },
-];
+import { api } from '../services/api';
 
 export default function RegisterForm() {
-  const [isLogin, setIsLogin] = useState(true);
+  const [isLogin, setIsLogin] = useState(false);
   const [role, setRole] = useState('paciente');
-  const [errorMsg, setErrorMsg] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
     password: '',
   });
 
-  // Expresión regular estándar para validar formato de correo
-  const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setErrorMsg('');
-
-    const cleanName = formData.fullName.trim();
-    const cleanEmail = formData.email.trim().toLowerCase();
-    const password = formData.password;
-
-    // 1. Validar nombre completo (solo en modo registro)
-    if (!isLogin && cleanName.length < 3) {
-      setErrorMsg('Por favor ingresa tu nombre completo (mínimo 3 caracteres).');
-      return;
-    }
-
-    // 2. Validar correo vacío o con mal formato
-    if (!cleanEmail) {
-      setErrorMsg('Por favor ingresa tu correo electrónico.');
-      return;
-    }
-    if (!isValidEmail(cleanEmail)) {
-      setErrorMsg('El formato del correo no es válido (ej. nombre@correo.cl).');
-      return;
-    }
-
-    // 3. Validar contraseña vacía o corta
-    if (!password) {
-      setErrorMsg('Por favor ingresa tu contraseña.');
-      return;
-    }
-    if (!isLogin && password.length < 8) {
-      setErrorMsg('La contraseña debe tener al menos 8 caracteres.');
-      return;
-    }
-
-    // 4. Lógica de INICIO DE SESIÓN con credenciales locales
-    if (isLogin) {
-      const foundUser = DEMO_USERS.find((u) => u.email === cleanEmail);
-
-      // Correo no existe en los usuarios de prueba
-      if (!foundUser) {
-        setErrorMsg('No existe una cuenta registrada con este correo electrónico.');
-        return;
-      }
-
-      // Correo existe, pero el rol seleccionado arriba no coincide
-      if (foundUser.role !== role) {
-        const perfilCorrecto = foundUser.role === 'profesional' ? 'Profesional' : 'Paciente';
-        setErrorMsg(
-          `Este correo pertenece a una cuenta de ${perfilCorrecto}. Cambia el perfil arriba para ingresar.`
-        );
-        return;
-      }
-
-      // Correo y rol coinciden, pero la contraseña falla
-      if (foundUser.password !== password) {
-        setErrorMsg('Contraseña incorrecta. Verifica mayúsculas, minúsculas y símbolos.');
-        return;
-      }
-
-      // Todo correcto -> Redirección
-      window.location.hash = foundUser.hash;
-      return;
-    }
-
-    // 5. Lógica de CREAR CUENTA (redirección local según rol)
-    window.location.hash = role === 'profesional' ? '#profesional' : '#paciente';
-  };
-
   const handleInputChange = (field, value) => {
-    if (errorMsg) setErrorMsg(''); // Limpia el error apenas el usuario vuelve a escribir
+    if (error) setError('');
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const toggleMode = () => {
-    setErrorMsg('');
+  const handleToggleMode = () => {
     setIsLogin((prev) => !prev);
+    setError('');
   };
 
-  const handleRoleChange = (nextRole) => {
-    setErrorMsg('');
-    setRole(nextRole);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const usuario = isLogin
+        ? await api.login({
+            email: formData.email,
+            password: formData.password,
+          })
+        : await api.registrar({
+            nombreCompleto: formData.fullName,
+            email: formData.email,
+            password: formData.password,
+            rol: role.toUpperCase(), // PACIENTE, PROFESIONAL, ADMINISTRADOR, DESARROLLADOR
+          });
+
+      localStorage.setItem('ceroNefritisUser', JSON.stringify(usuario));
+
+      window.location.hash =
+        usuario.rol === 'PROFESIONAL' ? '#profesional' : '#paciente';
+    } catch (err) {
+      setError(err.message || 'Ocurrió un error al procesar la solicitud.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <main className="flex-1 bg-white flex flex-col justify-center items-center p-8 lg:p-12 overflow-y-auto">
       <div className="w-full max-w-md flex flex-col justify-center items-center gap-6">
-        {/* noValidate evita el globo nativo feo del navegador para mostrar siempre nuestros mensajes */}
         <form
           onSubmit={handleSubmit}
           noValidate
@@ -131,13 +68,15 @@ export default function RegisterForm() {
             </h2>
             <p className="text-[#64748B] text-sm font-normal font-['Inter']">
               {isLogin
-                ? 'Ingresa tus credenciales para acceder a tu panel'
+                ? 'Ingresa tus credenciales para continuar'
                 : 'Elige cómo vas a usar la plataforma'}
             </p>
           </div>
 
-          {/* Selector de Roles */}
-          <RoleSelector selectedRole={role} onSelectRole={handleRoleChange} />
+          {/* Selector de Roles (solo en registro) */}
+          {!isLogin && (
+            <RoleSelector selectedRole={role} onSelectRole={setRole} />
+          )}
 
           {/* Campos */}
           {!isLogin && (
@@ -165,35 +104,40 @@ export default function RegisterForm() {
             onChange={(e) => handleInputChange('password', e.target.value)}
           />
 
-          {/* Caja de mensaje de error */}
-          {errorMsg && (
+          {/* Mensaje de error */}
+          {error && (
             <div
               role="alert"
-              className="w-full text-red-700 text-xs font-medium font-['Inter'] bg-red-50 border border-red-200 rounded-lg px-3.5 py-2.5 leading-relaxed"
+              className="w-full p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs font-medium font-['Inter']"
             >
-              {errorMsg}
+              {error}
             </div>
           )}
 
           {/* Botón principal */}
           <button
             type="submit"
-            className="w-full px-4 py-3 bg-[#0F766E] hover:bg-[#115E59] text-white text-sm font-semibold font-['Inter'] rounded-[10px] transition-colors shadow-sm cursor-pointer"
+            disabled={loading}
+            className="w-full px-4 py-3 bg-[#0F766E] hover:bg-[#115E59] disabled:opacity-50 text-white text-sm font-semibold font-['Inter'] rounded-[10px] transition-colors shadow-sm cursor-pointer"
           >
-            {isLogin ? 'Iniciar sesión' : 'Crear cuenta'}
+            {loading
+              ? 'Procesando...'
+              : isLogin
+                ? 'Entrar a la plataforma'
+                : 'Crear cuenta'}
           </button>
 
-          {/* Enlace alternar Registro / Login */}
+          {/* Alternar Login / Registro */}
           <div className="w-full flex justify-center items-center gap-1.5 pt-1">
             <span className="text-[#64748B] text-sm font-normal font-['Inter']">
               {isLogin ? '¿No tienes cuenta?' : '¿Ya tienes cuenta?'}
             </span>
             <button
               type="button"
-              onClick={toggleMode}
+              onClick={handleToggleMode}
               className="text-[#0F766E] hover:underline text-sm font-semibold font-['Inter'] cursor-pointer"
             >
-              {isLogin ? 'Crea una aquí' : 'Inicia sesión'}
+              {isLogin ? 'Regístrate' : 'Inicia sesión'}
             </button>
           </div>
         </form>
