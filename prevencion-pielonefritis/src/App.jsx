@@ -37,10 +37,12 @@ export default function App() {
 
   // Escuchamos los cambios en la URL cuando el usuario hace clic en el Sidebar o navega
   useEffect(() => {
-    const handleHashChange = () => setCurrentPath(window.location.hash);
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
+  const handleHashChange = () => {
+    setCurrentPath(window.location.hash || '#inicio');
+  };
+  window.addEventListener('hashchange', handleHashChange);
+  return () => window.removeEventListener('hashchange', handleHashChange);
+}, []);
 
   // ==========================================
   // 1. ZONA PRIVADA (PACIENTE)
