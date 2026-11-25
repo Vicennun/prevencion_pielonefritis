@@ -1,4 +1,4 @@
-import { supabase } from './supaBaseClient';
+import { supabase } from './supabaseClient';
 import { evaluarSemaforoClinico, ordenarPorPrioridadClinica } from './clinicalEngine';
 
 const BUCKET = 'archivos-clinicos';
