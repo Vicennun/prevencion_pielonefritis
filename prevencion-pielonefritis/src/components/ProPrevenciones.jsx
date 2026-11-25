@@ -1,100 +1,129 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { api, getStoredUser } from '../services/api';
+
+const CATEGORIAS = [
+  'Hábitos diarios',
+  'Señales de alarma',
+  'Tratamiento seguro',
+  'Salud sexual',
+  'Nutrición / Suplementos',
+];
 
 export default function ProPrevenciones() {
   const [activeTab, setActiveTab] = useState('Todas');
+  const [search, setSearch] = useState('');
+  const [prevenciones, setPrevenciones] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Datos mockeados de la base de conocimientos preventivos
-  const prevenciones = [
-    {
-      id: 1,
-      title: 'Hidratación constante',
-      category: 'Hábitos diarios',
-      description: 'Bebe agua durante todo el día (aprox. 1,5 a 2 litros, salvo indicación médica) para ayudar a eliminar bacterias del tracto urinario.',
-      author: 'Dra. Valentina Rojas',
-      date: '10 Sep 2026',
-      status: 'Activa',
-      statusColor: 'green'
-    },
-    {
-      id: 2,
-      title: 'No retener la orina',
-      category: 'Hábitos diarios',
-      description: 'Ve al baño cuando sientas ganas y vacía la vejiga por completo cada vez para evitar la proliferación bacteriana.',
-      author: 'Dr. Freddy Turbina',
-      date: '12 Sep 2026',
-      status: 'Activa',
-      statusColor: 'green'
-    },
-    {
-      id: 3,
-      title: 'Higiene post-coital',
-      category: 'Salud sexual',
-      description: 'Orinar inmediatamente después de las relaciones sexuales ayuda a expulsar bacterias que puedan haber entrado a la uretra.',
-      author: 'Matrona Silvia Pino',
-      date: '15 Sep 2026',
-      status: 'En revisión',
-      statusColor: 'amber'
-    },
-    {
-      id: 4,
-      title: 'Fiebre o escalofríos',
-      category: 'Señales de alarma',
-      description: 'Temperatura sobre 38 °C o escalofríos junto con síntomas urinarios requiere consulta de urgencia el mismo día.',
-      author: 'Dra. Valentina Rojas',
-      date: '20 Sep 2026',
-      status: 'Activa',
-      statusColor: 'green'
-    },
-    {
-      id: 5,
-      title: 'Uso profiláctico de arándanos',
-      category: 'Nutrición / Suplementos',
-      description: 'El uso de cápsulas de cranberry puede reducir la adherencia de E. coli, pero requiere validación de dosis según historial gástrico.',
-      author: 'Nut. Camila Ibáñez',
-      date: '02 Oct 2026',
-      status: 'Borrador',
-      statusColor: 'slate'
-    }
-  ];
+  const [showModal, setShowModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [nueva, setNueva] = useState({
+    titulo: '',
+    categoria: CATEGORIAS[0],
+    descripcion: '',
+    estado: 'En revisión',
+  });
 
-  // Helper de colores para los badges de estado
-  const getBadgeStyle = (color) => {
-    switch(color) {
-      case 'green': return 'bg-green-100 text-green-700';
-      case 'amber': return 'bg-amber-100 text-amber-700';
-      case 'red': return 'bg-red-100 text-red-700';
-      case 'slate': default: return 'bg-slate-200 text-slate-600';
+  const cargar = async () => {
+    try {
+      const lista = await api.getPrevenciones();
+      setPrevenciones(lista || []);
+    } catch (err) {
+      console.error('Error cargando prevenciones:', err);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
+    cargar();
+  }, []);
+
+  const handleCrear = async (e) => {
+    e.preventDefault();
+    if (!nueva.titulo.trim() || !nueva.descripcion.trim()) return;
+    setSaving(true);
+    try {
+      const autor = getStoredUser()?.nombreCompleto || 'Equipo médico';
+      await api.crearPrevencion({
+        titulo: nueva.titulo.trim(),
+        categoria: nueva.categoria,
+        descripcion: nueva.descripcion.trim(),
+        autor,
+        estado: nueva.estado,
+      });
+      setNueva({ titulo: '', categoria: CATEGORIAS[0], descripcion: '', estado: 'En revisión' });
+      setShowModal(false);
+      await cargar();
+    } catch (err) {
+      alert(`No se pudo crear la indicación: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCambiarEstado = async (id, nuevoEstado) => {
+    try {
+      await api.actualizarEstadoPrevencion(id, nuevoEstado);
+      setPrevenciones((prev) => prev.map((p) => (p.id === id ? { ...p, estado: nuevoEstado } : p)));
+    } catch (err) {
+      alert(`Error actualizando estado: ${err.message}`);
+    }
+  };
+
+  const tabMap = {
+    Todas: null,
+    Activas: 'Activa',
+    'En revisión': 'En revisión',
+    Borradores: 'Borrador',
+  };
+
+  const filtered = prevenciones.filter((item) => {
+    const expectedEstado = tabMap[activeTab];
+    const matchTab = !expectedEstado || item.estado === expectedEstado;
+    const q = search.trim().toLowerCase();
+    const matchSearch =
+      !q ||
+      item.titulo.toLowerCase().includes(q) ||
+      item.categoria.toLowerCase().includes(q) ||
+      item.descripcion.toLowerCase().includes(q);
+    return matchTab && matchSearch;
+  });
+
+  const getBadgeStyle = (estado) => {
+    if (estado === 'Activa') return 'bg-green-100 text-green-700';
+    if (estado === 'En revisión') return 'bg-amber-100 text-amber-800';
+    return 'bg-slate-200 text-slate-600';
   };
 
   return (
     <main className="flex-1 bg-neutral-200 min-h-screen p-4 lg:p-8 flex flex-col gap-6 overflow-y-auto">
-      
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
         <div className="flex flex-col gap-1">
           <h1 className="text-red-700 text-3xl font-bold font-['Inter']">Lista de prevenciones</h1>
-          <p className="text-slate-500 text-sm font-normal font-['Inter']">
-            Gestiona la base de conocimientos y pautas preventivas que ven tus pacientes.
+          <p className="text-slate-600 text-sm">
+            Gestiona la base de conocimientos preventivos. Las pautas en estado «Activa» se muestran inmediatamente a los pacientes.
           </p>
         </div>
-        <button className="px-4 py-3 bg-red-700 hover:bg-red-800 transition-colors rounded-[10px] text-white text-sm font-semibold font-['Inter'] shadow-sm shrink-0 flex items-center gap-2">
+        <button
+          onClick={() => setShowModal(true)}
+          className="px-4 py-3 bg-red-700 hover:bg-red-800 transition-colors rounded-[10px] text-white text-sm font-semibold shadow-sm shrink-0 flex items-center gap-2 cursor-pointer"
+        >
           <span className="text-lg leading-none">+</span> Nueva indicación
         </button>
       </div>
 
-      {/* Barra de Filtros y Buscador */}
+      {/* Filtros y Buscador */}
       <div className="p-4 bg-zinc-100 rounded-2xl border border-zinc-300 flex flex-col lg:flex-row justify-between lg:items-center gap-4 shrink-0">
-        
-        {/* Tabs de Filtro */}
-        <div className="flex gap-2 p-1 bg-zinc-200/50 rounded-xl">
-          {['Todas', 'Activas', 'En revisión', 'Borradores'].map(tab => (
-            <button 
+        <div className="flex flex-wrap gap-2 p-1 bg-zinc-200/60 rounded-xl">
+          {['Todas', 'Activas', 'En revisión', 'Borradores'].map((tab) => (
+            <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 text-xs font-semibold font-['Inter'] rounded-lg transition-colors ${
-                activeTab === tab 
-                  ? 'bg-white text-red-700 shadow-sm border border-slate-200' 
+              className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
+                activeTab === tab
+                  ? 'bg-white text-red-700 shadow-sm border border-slate-200'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-zinc-200'
               }`}
             >
@@ -103,74 +132,161 @@ export default function ProPrevenciones() {
           ))}
         </div>
 
-        {/* Buscador */}
         <div className="w-full lg:w-96 px-4 py-2.5 bg-white rounded-xl border border-slate-300 flex items-center shadow-sm">
-          <input 
-            type="text" 
-            placeholder="Buscar indicación o categoría..." 
-            className="w-full bg-transparent text-slate-700 placeholder:text-slate-400 text-sm font-normal font-['Inter'] focus:outline-none"
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar indicación o categoría..."
+            className="w-full bg-transparent text-slate-700 placeholder:text-slate-400 text-sm focus:outline-none"
           />
         </div>
       </div>
 
-      {/* Grid de Tarjetas de Prevención */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
-        {prevenciones.map((item) => (
-          <div key={item.id} className="bg-white rounded-2xl border border-slate-200 flex flex-col overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-            
-            {/* Cabecera de la Tarjeta */}
-            <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-start gap-4 bg-slate-50/50">
-              <div className="flex flex-col gap-1">
-                <span className="text-slate-500 text-[10px] font-bold font-['Inter'] uppercase tracking-wider">
-                  {item.category}
+      {/* Grid de Tarjetas */}
+      {loading ? (
+        <p className="text-xs text-slate-500">Cargando base de conocimientos...</p>
+      ) : filtered.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-xs text-slate-500">
+          No se encontraron guías preventivas en esta categoría.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
+          {filtered.map((item) => (
+            <div
+              key={item.id}
+              className="bg-white rounded-2xl border border-slate-200 flex flex-col overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+            >
+              <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-start gap-3 bg-slate-50/50">
+                <div className="flex flex-col gap-1">
+                  <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">{item.categoria}</span>
+                  <h3 className="text-slate-900 text-base font-semibold leading-tight">{item.titulo}</h3>
+                </div>
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase shrink-0 ${getBadgeStyle(item.estado)}`}>
+                  {item.estado}
                 </span>
-                <h3 className="text-slate-900 text-base font-semibold font-['Inter'] leading-tight">
-                  {item.title}
-                </h3>
               </div>
-              <div className={`px-2.5 py-1 rounded-full flex justify-center items-center shrink-0 ${getBadgeStyle(item.statusColor)}`}>
-                <span className="text-[10px] font-semibold font-['Inter'] uppercase">{item.status}</span>
+
+              <div className="px-5 py-4 flex-1">
+                <p className="text-slate-600 text-sm leading-relaxed">{item.descripcion}</p>
               </div>
-            </div>
 
-            {/* Cuerpo (Descripción) */}
-            <div className="px-5 py-4 flex-1">
-              <p className="text-slate-600 text-sm font-normal font-['Inter'] leading-relaxed line-clamp-3">
-                {item.description}
-              </p>
-            </div>
+              <div className="px-5 py-4 border-t border-slate-100 bg-white flex flex-col gap-3">
+                <div className="flex items-center justify-between text-xs text-slate-500">
+                  <span className="font-medium text-slate-700">{item.autor}</span>
+                  <span>{item.fecha}</span>
+                </div>
 
-            {/* Footer de la Tarjeta (Autor y Acciones) */}
-            <div className="px-5 py-4 border-t border-slate-100 bg-white flex flex-col gap-3">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 bg-slate-100 rounded-full flex justify-center items-center shrink-0 border border-slate-200">
-                    <span className="text-slate-500 text-[10px] font-semibold">{item.author.substring(0,2)}</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-slate-700 text-xs font-medium font-['Inter'] leading-none">{item.author}</span>
-                    <span className="text-slate-400 text-[10px] font-normal font-['Inter'] mt-0.5">{item.date}</span>
-                  </div>
+                <div className="flex flex-wrap gap-2">
+                  {item.estado !== 'Activa' && (
+                    <button
+                      onClick={() => handleCambiarEstado(item.id, 'Activa')}
+                      className="flex-1 py-2 bg-green-700 hover:bg-green-800 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                    >
+                      Aprobar y activar
+                    </button>
+                  )}
+                  {item.estado !== 'En revisión' && (
+                    <button
+                      onClick={() => handleCambiarEstado(item.id, 'En revisión')}
+                      className="flex-1 py-2 bg-white hover:bg-amber-50 border border-amber-400 text-amber-800 rounded-lg text-xs font-semibold cursor-pointer"
+                    >
+                      Pedir revisión
+                    </button>
+                  )}
+                  {item.estado !== 'Borrador' && (
+                    <button
+                      onClick={() => handleCambiarEstado(item.id, 'Borrador')}
+                      className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer"
+                    >
+                      Ocultar
+                    </button>
+                  )}
                 </div>
               </div>
+            </div>
+          ))}
+        </div>
+      )}
 
-              {/* Botones de acción colaborativa */}
-              <div className="flex gap-2 mt-1">
-                <button className="flex-1 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-700 text-xs font-semibold font-['Inter'] transition-colors">
-                  Editar
-                </button>
-                {item.status !== 'En revisión' && (
-                  <button className="flex-1 py-2 bg-white hover:bg-red-50 border border-red-700 text-red-700 rounded-lg text-xs font-semibold font-['Inter'] transition-colors">
-                    Pedir revisión
-                  </button>
-                )}
+      {/* Modal Nueva Indicación */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <form onSubmit={handleCrear} className="w-full max-w-md bg-white rounded-2xl p-6 flex flex-col gap-4 shadow-xl">
+            <h2 className="text-slate-900 text-lg font-bold">Nueva indicación preventiva</h2>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-800">Título de la pauta</label>
+              <span className="text-[11px] text-slate-500">Escribe un título claro y directo para el paciente.</span>
+              <input
+                type="text"
+                required
+                value={nueva.titulo}
+                onChange={(e) => setNueva({ ...nueva, titulo: e.target.value })}
+                className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-800">Categoría</label>
+                <select
+                  value={nueva.categoria}
+                  onChange={(e) => setNueva({ ...nueva, categoria: e.target.value })}
+                  className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm"
+                >
+                  {CATEGORIAS.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-800">Estado inicial</label>
+                <select
+                  value={nueva.estado}
+                  onChange={(e) => setNueva({ ...nueva, estado: e.target.value })}
+                  className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm"
+                >
+                  <option value="Activa">Activa (visible al paciente)</option>
+                  <option value="En revisión">En revisión</option>
+                  <option value="Borrador">Borrador</option>
+                </select>
               </div>
             </div>
 
-          </div>
-        ))}
-      </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-800">Descripción clínica</label>
+              <span className="text-[11px] text-slate-500">
+                Evita metas universales de líquidos o sugerencias automáticas de antibióticos.
+              </span>
+              <textarea
+                rows={4}
+                required
+                value={nueva.descripcion}
+                onChange={(e) => setNueva({ ...nueva, descripcion: e.target.value })}
+                className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm"
+              />
+            </div>
 
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-5 py-2 bg-red-700 hover:bg-red-800 text-white rounded-lg text-xs font-semibold cursor-pointer"
+              >
+                {saving ? 'Guardando...' : 'Guardar indicación'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </main>
   );
 }

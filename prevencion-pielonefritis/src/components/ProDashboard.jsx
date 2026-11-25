@@ -1,169 +1,277 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import NotificationsMenu from './NotificationsMenu';
+import { api, getStoredUser } from '../services/api';
+import { PRIORIDAD_META } from '../services/clinicalEngine';
 
 export default function ProDashboard() {
-  const atenciones = [
-    { title: 'Control de perfil lipídico', patient: 'Rodrigo Rojas', date: '2 oct 2026', status: 'En proceso', color: 'blue' },
-    { title: 'Examen de laboratorio', patient: 'Laboratorio central', date: '2 oct 2026', status: 'Completado', color: 'green' },
-    { title: 'Consulta de seguimiento', patient: 'Camila Ñuñez', date: '15 sep 2026', status: 'Cancelado', color: 'slate' },
-  ];
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const pacientes = [
-    { name: 'Camila Ñuñez Suazo', update: 'Consulta seguimiento', status: 'cancelada' },
-    { name: 'Rodrigo Rojas Torres', update: 'Control Perfil lipídico.', status: 'Esperando resultados' },
-    { name: 'Ernesto Salamanca', update: 'Control glucemia', status: 'Reagendado' },
-  ];
+  const [atenciones, setAtenciones] = useState([]);
+  const [seguimientos, setSeguimientos] = useState([]);
+  const [mensajes, setMensajes] = useState([]);
+  const [recordatorios, setRecordatorios] = useState([]);
+  const [examenesPendientes, setExamenesPendientes] = useState([]);
 
-  const getBadgeColors = (color) => {
-    switch(color) {
-      case 'blue': return 'bg-blue-100 text-blue-700';
-      case 'green': return 'bg-green-100 text-green-700';
-      default: return 'bg-slate-200 text-slate-600';
-    }
+  const proUser = getStoredUser();
+  const proId = proUser?.id || 1;
+  const primerNombre = (proUser?.nombreCompleto || 'Profesional')
+    .replace(/^(Dr\.|Dra\.)\s*/i, '')
+    .split(' ')[0];
+
+  useEffect(() => {
+    const cargar = async () => {
+      try {
+        const [ats, segs, msgs, recs, exs] = await Promise.all([
+          api.getTodasAtenciones(),
+          api.getSeguimientos(),
+          api.getMensajesUsuario(proId),
+          api.getTodosRecordatorios(),
+          api.getExamenesPendientes(),
+        ]);
+        setAtenciones(ats || []);
+        setSeguimientos(segs || []);
+        setMensajes(msgs || []);
+        setRecordatorios(recs || []);
+        setExamenesPendientes(exs || []);
+      } catch (err) {
+        console.error('Error cargando dashboard profesional:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    cargar();
+  }, [proId]);
+
+  const hoy = new Date();
+  const diaCorto = hoy.toLocaleDateString('es-CL', { weekday: 'short' }).replace('.', '');
+  const fechaCorta = hoy.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  const urgentesCount = seguimientos.filter(
+    (s) => s.nivel_semaforo === 'URGENCIA_INMEDIATA' || s.nivel_semaforo === 'ROJO'
+  ).length;
+
+  const mensajesRecibidos = mensajes.filter((m) => m.destinatario_id === proId);
+  const noLeidos = mensajesRecibidos.filter((m) => !m.leido).length;
+
+  const getEstadoBadge = (estado) => {
+    if (estado === 'En proceso') return 'bg-blue-100 text-blue-700';
+    if (estado === 'Completado') return 'bg-green-100 text-green-700';
+    return 'bg-slate-200 text-slate-600';
   };
+
+  if (loading) {
+    return (
+      <main className="flex-1 bg-neutral-200 min-h-screen p-8 flex items-center justify-center">
+        <p className="text-slate-600 text-sm font-medium font-['Inter']">Cargando panel profesional...</p>
+      </main>
+    );
+  }
 
   return (
     <main className="flex-1 bg-neutral-200 min-h-screen p-4 lg:p-8 flex flex-col gap-6 overflow-y-auto">
-      
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0 relative">
         <div className="flex flex-col gap-1">
-          <h1 className="text-red-700 text-3xl font-bold font-['Inter']">Saludos, Freddy</h1>
-          <p className="text-red-700/70 text-sm font-normal font-['Inter']">Lobby gestión - profesional</p>
+          <h1 className="text-red-700 text-3xl font-bold font-['Inter']">Saludos, {primerNombre}</h1>
+          <p className="text-slate-600 text-sm font-normal font-['Inter']">
+            Panel de gestión clínica · Seguimiento y prevención de pielonefritis
+          </p>
         </div>
-        
+
         <div className="flex items-center gap-4">
           <div className="text-right hidden sm:block">
-            <span className="text-red-700 text-3xl font-bold font-['Inter'] pr-2">Mon.</span>
-            <span className="text-red-700 text-2xl font-bold font-['Inter']">05/10/2026</span>
+            <span className="text-red-700 text-2xl font-bold font-['Inter'] capitalize pr-2">{diaCorto}.</span>
+            <span className="text-red-700 text-xl font-bold font-['Inter']">{fechaCorta}</span>
           </div>
-          <button className="px-3.5 py-2.5 bg-zinc-100 rounded-full border border-zinc-300 flex items-center gap-2 shadow-sm">
-            <div className="w-2 h-2 bg-red-700 rounded-sm animate-pulse" />
-            <span className="text-red-700 text-xs font-medium font-['Inter']">3 notificaciones</span>
-          </button>
+
+          <div className="relative">
+            <button
+              onClick={() => setShowNotifications(!showNotifications)}
+              className="px-3.5 py-2.5 bg-zinc-100 hover:bg-white rounded-full border border-zinc-300 flex items-center gap-2 shadow-sm cursor-pointer"
+            >
+              <div className="w-2 h-2 bg-red-700 rounded-sm animate-pulse" />
+              <span className="text-red-700 text-xs font-semibold font-['Inter']">
+                {recordatorios.length} alertas/tareas
+              </span>
+            </button>
+            <NotificationsMenu isOpen={showNotifications} onClose={() => setShowNotifications(false)} />
+          </div>
         </div>
       </div>
 
-      {/* Grid Content */}
+      {/* Banner de Prioridad Inmediata */}
+      {urgentesCount > 0 && (
+        <div className="p-4 bg-red-100 border border-red-300 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-red-800 text-sm font-bold">
+              {urgentesCount} paciente(s) con criterios de Urgencia Inmediata o Valoración Hoy
+            </span>
+            <span className="text-red-700 text-xs">
+              Revisa el Monitor Clínico ordenado por reglas deterministas para priorizar atención presencial.
+            </span>
+          </div>
+          <a
+            href="#profesional/seguimiento-activo"
+            className="px-4 py-2.5 bg-red-700 hover:bg-red-800 text-white text-xs font-bold rounded-xl shrink-0"
+          >
+            Abrir Monitor Clínico
+          </a>
+        </div>
+      )}
+
+      {/* Grid Principal */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
-        
-        {/* Columna Izquierda (Principal) */}
+        {/* Columna Izquierda */}
         <div className="xl:col-span-2 flex flex-col gap-6">
-          
-          {/* Mis Atenciones */}
+          {/* Panel de Pacientes Priorizados por Semáforo */}
+          <section className="p-6 bg-zinc-100 rounded-2xl border border-zinc-300 flex flex-col gap-4">
+            <div className="flex justify-between items-center gap-2">
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-red-700 text-lg font-bold font-['Inter']">Pacientes prioritarios en seguimiento</h2>
+                <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
+                  {seguimientos.length} activos
+                </span>
+              </div>
+              <a href="#profesional/pacientes" className="text-slate-600 hover:text-red-700 text-xs font-semibold hover:underline">
+                Ver todos
+              </a>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {seguimientos.slice(0, 3).map((seg) => {
+                const meta = PRIORIDAD_META[seg.nivel_semaforo] || PRIORIDAD_META.INFORMACION_INSUFICIENTE;
+                return (
+                  <a
+                    key={seg.id}
+                    href={`#profesional/seguimiento-activo/${seg.paciente_id}`}
+                    className="p-4 bg-white rounded-xl border border-zinc-200 hover:border-red-400 transition-colors flex flex-col gap-2 shadow-sm"
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <h3 className="text-slate-900 text-sm font-bold leading-tight">
+                        {seg.paciente?.nombreCompleto || 'Paciente'}
+                      </h3>
+                      <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase shrink-0 ${meta.badge}`}>
+                        {meta.short}
+                      </span>
+                    </div>
+                    <p className="text-slate-600 text-xs line-clamp-2">{seg.diagnostico}</p>
+                    <span className="text-slate-500 text-[11px] mt-auto">
+                      Temp: {seg.temperatura_actual != null ? `${seg.temperatura_actual} °C` : '—'} · Dolor: {seg.dolor_lumbar_actual != null ? `${seg.dolor_lumbar_actual}/10` : '—'}
+                    </span>
+                  </a>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* Últimas Atenciones */}
           <section className="p-6 bg-zinc-100 rounded-2xl border border-zinc-300 flex flex-col gap-4">
             <div className="flex justify-between items-center w-full">
-              <h2 className="text-red-700 text-lg font-bold font-['Inter']">Mis atenciones</h2>
-              <button className="text-stone-500 text-xs font-semibold font-['Inter'] hover:underline">Ver todas</button>
+              <h2 className="text-red-700 text-lg font-bold font-['Inter']">Atenciones recientes</h2>
+              <a href="#profesional/historial" className="text-slate-600 hover:text-red-700 text-xs font-semibold hover:underline">
+                Ver historial
+              </a>
             </div>
-            
+
             <div className="flex flex-col gap-3 w-full">
-              {atenciones.map((item, idx) => (
-                <div key={idx} className="px-4 py-3.5 bg-white rounded-xl border border-zinc-200 flex justify-between items-center gap-4">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-red-700 text-sm font-semibold font-['Inter']">{item.title}</span>
-                    <span className="text-red-700/70 text-xs font-normal font-['Inter']">{item.patient} · {item.date}</span>
+              {atenciones.slice(0, 4).map((item) => (
+                <a
+                  key={item.id}
+                  href={`#profesional/detalle-atencion/${item.id}`}
+                  className="px-4 py-3.5 bg-white hover:bg-slate-50 rounded-xl border border-zinc-200 flex justify-between items-center gap-4 transition-colors"
+                >
+                  <div className="flex flex-col gap-0.5 overflow-hidden">
+                    <span className="text-slate-900 text-sm font-semibold truncate">{item.titulo}</span>
+                    <span className="text-slate-500 text-xs truncate">
+                      {item.paciente?.nombre_completo || 'Paciente'} · {new Date(item.fecha_hora).toLocaleDateString('es-CL')} · {item.modalidad}
+                    </span>
                   </div>
-                  <div className={`px-2.5 py-1 rounded-full flex justify-center items-center shrink-0 ${getBadgeColors(item.color)}`}>
-                    <span className="text-xs font-semibold font-['Inter']">{item.status}</span>
-                  </div>
-                </div>
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-semibold shrink-0 ${getEstadoBadge(item.estado)}`}>
+                    {item.estado}
+                  </span>
+                </a>
               ))}
+              {atenciones.length === 0 && (
+                <p className="text-slate-500 text-xs">No hay atenciones registradas aún.</p>
+              )}
             </div>
           </section>
-
-          {/* Pacientes en Seguimiento */}
-          <section className="p-6 bg-zinc-100 rounded-2xl border border-zinc-300 flex flex-col gap-4">
-            <div className="flex items-center gap-2.5 w-full">
-              <h2 className="text-red-700 text-lg font-bold font-['Inter']">Panel pacientes en seguimiento</h2>
-              <div className="px-2.5 py-1 bg-red-100 rounded-full">
-                <span className="text-red-700 text-xs font-semibold font-['Inter']">2+ Pendientes</span>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {pacientes.map((paciente, idx) => (
-                <div key={idx} className="p-4 bg-white rounded-xl border border-zinc-200 flex flex-col gap-1.5 shadow-sm">
-                  <h3 className="text-red-700 text-sm font-semibold font-['Inter']">{paciente.name}</h3>
-                  <p className="text-slate-600 text-xs font-normal font-['Inter'] leading-relaxed">
-                    Ult. actualización: {paciente.update}<br/>
-                    Estado: {paciente.status}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </section>
-
         </div>
 
-        {/* Columna Derecha (Secundaria) */}
+        {/* Columna Derecha */}
         <div className="xl:col-span-1 flex flex-col gap-6">
-          
-          {/* Mensajes */}
+          {/* Exámenes pendientes de revisión */}
           <section className="p-6 bg-zinc-100 rounded-2xl border border-zinc-300 flex flex-col gap-3">
-            <span className="text-red-700/70 text-xs font-medium font-['Inter']">Tus mensajes</span>
             <div className="flex justify-between items-center">
-              <h2 className="text-red-700 text-2xl font-bold font-['Inter']">Mensajes</h2>
-              <div className="px-2.5 py-1 bg-amber-100 rounded-full">
-                <span className="text-amber-700 text-xs font-semibold font-['Inter']">3 de 5</span>
-              </div>
+              <h2 className="text-red-700 text-base font-bold font-['Inter']">Urocultivos y exámenes</h2>
+              <span className="px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-bold">
+                {examenesPendientes.length} pendientes
+              </span>
             </div>
-            <div className="w-full h-2 bg-zinc-300 rounded-sm overflow-hidden mt-1">
-              <div className="w-[60%] h-full bg-black rounded-sm" />
-            </div>
-            <h3 className="text-red-700 text-xs font-semibold font-['Inter'] mt-2">Lista asuntos últimos mensajes</h3>
-            <ul className="flex flex-col gap-1">
-              <li className="text-slate-600 text-xs font-normal font-['Inter'] truncate">• Dolor de cabeza al despertar - R.Rojas</li>
-              <li className="text-slate-600 text-xs font-normal font-['Inter'] truncate">• Puedo comer frutas? - E.Salamanca</li>
-              <li className="text-slate-600 text-xs font-normal font-['Inter'] truncate">• Doc. Quedé embarazada - Camila Ñuñez</li>
-            </ul>
+            <p className="text-slate-600 text-xs">
+              Resultados cargados por pacientes esperando transcripción clínica y conducta documentada.
+            </p>
+            <a
+              href={
+                examenesPendientes[0]
+                  ? `#profesional/revision-examen/${examenesPendientes[0].id}`
+                  : '#profesional/revision-examen'
+              }
+              className="w-full mt-1 px-4 py-3 bg-red-700 hover:bg-red-800 transition-colors rounded-[10px] text-white text-sm font-semibold text-center"
+            >
+              Revisar exámenes pendientes
+            </a>
           </section>
 
-          {/* Ingreso Nuevo Paciente */}
+          {/* Mensajes Recientes */}
           <section className="p-6 bg-zinc-100 rounded-2xl border border-zinc-300 flex flex-col gap-3">
-            <h2 className="text-red-700 text-base font-bold font-['Inter']">Ingresar nuevo paciente</h2>
-            <p className="text-red-700/70 text-xs font-normal font-['Inter']">Completar Ingreso</p>
-            
-            <div className="w-full h-2 bg-zinc-300 rounded-sm mt-1 overflow-hidden">
-              <div className="w-[15%] h-full bg-red-700 rounded-sm" />
+            <div className="flex justify-between items-center">
+              <h2 className="text-red-700 text-lg font-bold font-['Inter']">Mensajes</h2>
+              <span className="px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-semibold">
+                {noLeidos} sin leer
+              </span>
             </div>
-            <span className="text-red-700/70 text-xs font-medium font-['Inter']">15% completado</span>
-            
-            <button className="w-full mt-2 px-4 py-3 bg-red-700 hover:bg-red-800 transition-colors rounded-[10px] flex justify-center items-center">
-              <span className="text-white text-sm font-semibold font-['Inter']">Continuar ingreso</span>
-            </button>
+            <ul className="flex flex-col gap-2">
+              {mensajesRecibidos.slice(0, 3).map((m) => (
+                <li key={m.id} className="p-2.5 bg-white rounded-lg border border-zinc-200 text-xs text-slate-700">
+                  <span className="font-semibold text-slate-900 block truncate">
+                    {m.remitente?.nombre_completo || 'Paciente'}
+                  </span>
+                  <span className="text-slate-500 line-clamp-1">{m.contenido}</span>
+                </li>
+              ))}
+              {mensajesRecibidos.length === 0 && (
+                <li className="text-xs text-slate-500">Sin mensajes recientes.</li>
+              )}
+            </ul>
+            <a href="#profesional/mensajes" className="text-red-700 text-xs font-semibold hover:underline self-start">
+              Abrir bandeja de entrada ›
+            </a>
           </section>
 
-          {/* Recordatorios */}
-          <section className="p-6 bg-zinc-100 rounded-2xl border border-zinc-300 flex flex-col gap-4">
-            <h2 className="text-red-700 text-base font-bold font-['Inter']">Recordatorios</h2>
-            
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-2 h-2 bg-stone-500 rounded-sm shrink-0" />
-                <div className="flex flex-col gap-px overflow-hidden">
-                  <span className="text-red-700 text-xs font-semibold font-['Inter'] truncate">Resultados Seguimiento Camila</span>
-                  <span className="text-red-700/70 text-xs font-normal font-['Inter']">Vie 9 oct.</span>
+          {/* Tareas y Recordatorios */}
+          <section className="p-6 bg-zinc-100 rounded-2xl border border-zinc-300 flex flex-col gap-3">
+            <div className="flex justify-between items-center">
+              <h2 className="text-red-700 text-base font-bold font-['Inter']">Centro de Comando</h2>
+              <a href="#profesional/recordatorios" className="text-slate-600 text-xs font-semibold hover:underline">
+                Gestionar
+              </a>
+            </div>
+            <div className="flex flex-col gap-2.5">
+              {recordatorios.slice(0, 3).map((rec) => (
+                <div key={rec.id} className="flex items-start gap-2.5">
+                  <div className={`w-2 h-2 mt-1.5 rounded-sm shrink-0 ${rec.prioridad === 'Alta' ? 'bg-red-700' : 'bg-stone-500'}`} />
+                  <div className="flex flex-col overflow-hidden">
+                    <span className="text-slate-900 text-xs font-semibold truncate">{rec.titulo}</span>
+                    <span className="text-slate-500 text-[11px] truncate">
+                      {rec.paciente?.nombre_completo || 'General'} · {rec.fecha_programada || rec.frecuencia}
+                    </span>
+                  </div>
                 </div>
-              </div>
-
-              <div className="flex items-center gap-2.5">
-                <div className="w-2 h-2 bg-stone-500 rounded-sm shrink-0" />
-                <div className="flex flex-col gap-px overflow-hidden">
-                  <span className="text-red-700 text-xs font-semibold font-['Inter'] truncate">Subir examen de laboratorio</span>
-                  <span className="text-red-700/70 text-xs font-normal font-['Inter']">Vie 9 oct</span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2.5">
-                <div className="w-2 h-2 bg-stone-500 rounded-sm shrink-0" />
-                <div className="flex flex-col gap-px overflow-hidden">
-                  <span className="text-red-700 text-xs font-semibold font-['Inter'] truncate">Seguimiento Ernesto</span>
-                  <span className="text-red-700/70 text-xs font-normal font-['Inter']">Lun 12 oct</span>
-                </div>
-              </div>
+              ))}
             </div>
           </section>
-
         </div>
       </div>
     </main>

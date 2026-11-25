@@ -1,115 +1,314 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { api, getStoredUser } from '../services/api';
+import { UROCULTIVO_ESTADOS } from '../services/clinicalEngine';
 
-export default function ProRevisionExamen() {
+export default function ProRevisionExamen({ examenId }) {
+  const [pendientes, setPendientes] = useState([]);
+  const [examen, setExamen] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState('');
+
+  const [form, setForm] = useState({
+    estado: 'Revisado: conducta documentada',
+    resultadoCultivo: '',
+    microorganismo: '',
+    recuentoColonias: '',
+    resumenAntibiograma: '',
+    conductaDocumentada: '',
+    resistenteATratamiento: false,
+  });
+
+  const cargarFormularioDesdeExamen = (ex) => {
+    if (!ex) return;
+    setForm({
+      estado: ex.estado || 'Revisado: conducta documentada',
+      resultadoCultivo: ex.resultado_cultivo || '',
+      microorganismo: ex.microorganismo || '',
+      recuentoColonias: ex.recuento_colonias || '',
+      resumenAntibiograma: ex.resumen_antibiograma || '',
+      conductaDocumentada: ex.conducta_documentada || '',
+      resistenteATratamiento: Boolean(ex.resistente_a_tratamiento),
+    });
+  };
+
+  const cargar = async (targetId = examenId) => {
+    setLoading(true);
+    try {
+      const lista = await api.getExamenesPendientes();
+      setPendientes(lista || []);
+
+      let seleccionado = null;
+      if (targetId) {
+        seleccionado = await api.getExamenById(targetId);
+      } else if (lista?.length) {
+        seleccionado = lista[0];
+      }
+
+      setExamen(seleccionado);
+      cargarFormularioDesdeExamen(seleccionado);
+    } catch (err) {
+      console.error('Error cargando examen:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    cargar(examenId);
+  }, [examenId]);
+
+  const handleGuardar = async (e) => {
+    e.preventDefault();
+    if (!examen) return;
+    setSaving(true);
+    setFeedback('');
+
+    try {
+      const proName = getStoredUser()?.nombreCompleto || 'Equipo médico';
+      const actualizado = await api.revisarExamen(examen.id, {
+        ...form,
+        profesionalRevisor: proName,
+      });
+      setExamen(actualizado);
+      setFeedback('Revisión y conducta clínica guardadas correctamente. El paciente ya puede ver la actualización.');
+      const lista = await api.getExamenesPendientes();
+      setPendientes(lista || []);
+    } catch (err) {
+      setFeedback(`Error al guardar: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <main className="flex-1 bg-neutral-200 min-h-screen p-8 flex items-center justify-center">
+        <p className="text-slate-600 text-sm font-medium">Cargando visor de exámenes...</p>
+      </main>
+    );
+  }
+
+  const isPdf = examen?.url_archivo?.toLowerCase().includes('.pdf');
+
   return (
-    <main className="flex-1 bg-neutral-200 min-h-screen p-4 lg:p-8 flex flex-col gap-6 overflow-hidden">
-      
-      {/* Header */}
-      <div className="flex justify-between items-center shrink-0">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 bg-red-100 text-red-800 text-[10px] font-bold rounded border border-red-200 uppercase">
-              Documento Pendiente de Revisión
-            </span>
-          </div>
-          <h1 className="text-red-700 text-3xl font-bold font-['Inter']">Urocultivo de control</h1>
-          <p className="text-slate-500 text-sm font-normal font-['Inter']">
-            Subido por Mateo Fuentes (PAC-001284) hace 10 minutos.
-          </p>
+    <main className="flex-1 bg-neutral-200 min-h-screen p-4 lg:p-8 flex flex-col gap-6 overflow-y-auto">
+      {/* Selector de Pendientes si hay varios */}
+      {pendientes.length > 0 && (
+        <div className="bg-white p-2.5 rounded-xl border border-slate-200 flex flex-wrap items-center gap-2 shrink-0">
+          <span className="px-2 text-xs font-semibold text-slate-500 uppercase">Exámenes pendientes:</span>
+          {pendientes.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => {
+                setExamen(p);
+                cargarFormularioDesdeExamen(p);
+                setFeedback('');
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${
+                examen?.id === p.id
+                  ? 'bg-red-700 text-white'
+                  : 'bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              {p.paciente?.nombre_completo || 'Paciente'} · {p.nombre_archivo || p.tipo_examen}
+            </button>
+          ))}
         </div>
-        <a href="#profesional/seguimiento-activo" className="px-4 py-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-[10px] text-slate-900 text-sm font-semibold transition-colors">
-          Cerrar revisión
+      )}
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
+        <div className="flex flex-col gap-1">
+          <span className="self-start px-2.5 py-0.5 bg-red-100 text-red-800 text-[10px] font-bold rounded border border-red-200 uppercase">
+            {examen ? examen.estado : 'Sin pendientes'}
+          </span>
+          <h1 className="text-red-700 text-3xl font-bold font-['Inter']">
+            {examen ? examen.tipo_examen || 'Revisión de examen' : 'Revisión de exámenes'}
+          </h1>
+          {examen && (
+            <p className="text-slate-600 text-sm">
+              Paciente: <strong>{examen.paciente?.nombre_completo || 'Paciente'}</strong> · Subido el{' '}
+              {new Date(examen.fecha_subida).toLocaleString('es-CL')}
+            </p>
+          )}
+        </div>
+
+        <a
+          href={examen ? `#profesional/seguimiento-activo/${examen.paciente_id}` : '#profesional/seguimiento-activo'}
+          className="px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-[10px] text-slate-900 text-sm font-semibold"
+        >
+          Volver al Monitor
         </a>
       </div>
 
-      <div className="flex-1 flex flex-col xl:flex-row gap-6 overflow-hidden">
-        
-        {/* Visualizador del Documento (Izquierda) */}
-        <div className="flex-1 bg-zinc-700 rounded-2xl border border-slate-300 shadow-sm flex flex-col overflow-hidden h-[500px] xl:h-auto">
-          <div className="px-4 py-2 bg-zinc-800 flex justify-between items-center shrink-0">
-            <span className="text-zinc-300 text-xs font-semibold">Urocultivo_Mateo_Octubre.pdf (1/1)</span>
-            <div className="flex gap-2">
-              <button className="w-6 h-6 bg-zinc-600 hover:bg-zinc-500 rounded flex justify-center items-center text-white text-xs">+</button>
-              <button className="w-6 h-6 bg-zinc-600 hover:bg-zinc-500 rounded flex justify-center items-center text-white text-xs">-</button>
-            </div>
-          </div>
-          {/* Documento simulado */}
-          <div className="flex-1 p-8 overflow-y-auto flex justify-center">
-            <div className="w-full max-w-lg bg-white shadow-xl h-[800px] p-8 flex flex-col gap-4 cursor-text">
-              <h2 className="text-center font-bold text-xl border-b pb-2">LABORATORIO CLÍNICO CENTRAL</h2>
-              <div className="text-sm space-y-1">
-                <p><strong>Paciente:</strong> Mateo Fuentes Rojas</p>
-                <p><strong>Muestra:</strong> Orina (Chorro medio)</p>
-              </div>
-              <div className="mt-4 text-sm border border-slate-800 p-4">
-                <h3 className="font-bold underline mb-2">EXAMEN BACTERIOLÓGICO (UROCULTIVO)</h3>
-                <p className="text-red-600 font-bold mt-2">RESULTADO: POSITIVO</p>
-                <p className="mt-1"><strong>Desarrollo de:</strong> Escherichia coli</p>
-                <p className="mt-1"><strong>Recuento de colonias:</strong> &gt; 100.000 UFC/mL</p>
-              </div>
-              <div className="mt-4 text-sm border border-slate-800 p-4">
-                <h3 className="font-bold underline mb-2">ANTIBIOGRAMA</h3>
-                <p className="text-green-700">Sensible: Ciprofloxacino, Nitrofurantoína.</p>
-                <p className="text-red-700">Resistente: Amoxicilina, Cefadroxilo.</p>
-              </div>
-            </div>
-          </div>
+      {feedback && (
+        <div className="p-3.5 bg-green-50 border border-green-300 rounded-xl text-green-800 text-xs font-semibold">
+          {feedback}
         </div>
+      )}
 
-        {/* Formulario de Transcripción Clínica (Derecha) */}
-        <div className="w-full xl:w-[450px] bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col shrink-0 h-max overflow-y-auto">
-          <div className="p-5 border-b border-slate-100 bg-slate-50/50">
-            <h2 className="text-slate-900 text-lg font-bold font-['Inter']">Digitalizar Resultado</h2>
-            <p className="text-slate-500 text-xs font-normal mt-1">Extrae los datos clave para actualizar el Semáforo Clínico del paciente.</p>
+      {!examen ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 text-sm">
+          No hay exámenes pendientes de revisión en este momento.
+        </div>
+      ) : (
+        <div className="flex-1 flex flex-col xl:flex-row gap-6 items-start">
+          {/* Visualizador Real del Documento (Izquierda) */}
+          <div className="w-full xl:flex-1 bg-zinc-800 rounded-2xl border border-slate-300 shadow-sm flex flex-col overflow-hidden min-h-[540px]">
+            <div className="px-4 py-3 bg-zinc-900 flex justify-between items-center gap-3">
+              <span className="text-zinc-200 text-xs font-semibold truncate">
+                {examen.nombre_archivo || 'Documento clínico'}
+              </span>
+              {examen.url_archivo && (
+                <a
+                  href={examen.url_archivo}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded text-xs font-semibold shrink-0"
+                >
+                  Abrir en nueva pestaña ↗
+                </a>
+              )}
+            </div>
+
+            <div className="flex-1 p-4 flex items-center justify-center bg-zinc-700 min-h-[500px]">
+              {examen.url_archivo ? (
+                isPdf ? (
+                  <iframe
+                    src={examen.url_archivo}
+                    title={examen.nombre_archivo}
+                    className="w-full h-[560px] bg-white rounded-lg"
+                  />
+                ) : (
+                  <img
+                    src={examen.url_archivo}
+                    alt={examen.nombre_archivo}
+                    className="max-w-full max-h-[560px] object-contain rounded-lg shadow-lg bg-white"
+                  />
+                )
+              ) : (
+                <div className="max-w-md bg-white rounded-xl p-6 text-center flex flex-col gap-2 shadow-lg">
+                  <span className="text-slate-900 text-sm font-bold">Sin archivo adjunto en Storage</span>
+                  <p className="text-slate-600 text-xs leading-relaxed">
+                    Este registro corresponde a un examen inicial de prueba sin PDF cargado. Sube un PDF o foto desde la vista <strong>Mis Exámenes</strong> del paciente para visualizar el informe original aquí.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
-          
-          <div className="p-5 flex flex-col gap-5">
-            {/* Campo: Resultado General */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-slate-700 text-sm font-semibold">Resultado del Cultivo</label>
-              <select className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-red-700">
-                <option value="">Selecciona un estado...</option>
-                <option value="positivo">Positivo (Infección)</option>
-                <option value="negativo">Negativo</option>
-                <option value="contaminado">Muestra contaminada (Rechazado)</option>
-              </select>
-            </div>
 
-            {/* Campo: Microorganismo */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-slate-700 text-sm font-semibold">Microorganismo Aislado</label>
-              <input type="text" defaultValue="Escherichia coli" className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-red-700" />
-            </div>
-
-            {/* Campo: Recuento */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-slate-700 text-sm font-semibold">Recuento de Colonias (UFC/mL)</label>
-              <input type="text" defaultValue="> 100.000" className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-red-700" />
-            </div>
-
-            {/* Campo: Antibiograma */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-slate-700 text-sm font-semibold">Resumen Antibiograma</label>
-              <textarea rows="3" defaultValue="Sensible: Ciprofloxacino, Nitrofurantoína. Resistente: Amoxicilina." className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:border-red-700 resize-none"></textarea>
-            </div>
-
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex gap-3 mt-2">
-              <span className="text-xl">⚠️</span>
-              <p className="text-amber-800 text-xs font-medium leading-relaxed">
-                Al guardar, este examen pasará a estado "Revisado". Si el microorganismo es resistente al tratamiento actual del paciente, el semáforo se actualizará a Riesgo Alto automáticamente.
+          {/* Formulario de Transcripción Clínica (Derecha — sin valores precargados) */}
+          <form
+            onSubmit={handleGuardar}
+            className="w-full xl:w-[440px] bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col shrink-0"
+          >
+            <div className="p-5 border-b border-slate-100 bg-slate-50/50">
+              <h2 className="text-slate-900 text-lg font-bold">Transcripción y conducta clínica</h2>
+              <p className="text-slate-500 text-xs mt-1">
+                Documenta el resultado junto con la evaluación clínica. La plataforma no modifica antibióticos automáticamente.
               </p>
             </div>
-          </div>
 
-          <div className="p-5 border-t border-slate-100 flex flex-col gap-3">
-            <button className="w-full py-3 bg-red-700 hover:bg-red-800 transition-colors text-white rounded-xl text-sm font-bold shadow-sm">
-              Guardar e Informar al Paciente
-            </button>
-          </div>
+            <div className="p-5 flex flex-col gap-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-slate-800 text-xs font-semibold">Estado del urocultivo / examen</label>
+                <span className="text-slate-500 text-[11px]">Selecciona el estado oficial tras tu revisión.</span>
+                <select
+                  value={form.estado}
+                  onChange={(e) => setForm({ ...form, estado: e.target.value })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900"
+                >
+                  {UROCULTIVO_ESTADOS.map((est) => (
+                    <option key={est} value={est}>{est}</option>
+                  ))}
+                </select>
+              </div>
 
+              <div className="flex flex-col gap-1">
+                <label className="text-slate-800 text-xs font-semibold">Resultado del cultivo</label>
+                <span className="text-slate-500 text-[11px]">Conserva también resultados negativos o muestras contaminadas.</span>
+                <select
+                  value={form.resultadoCultivo}
+                  onChange={(e) => setForm({ ...form, resultadoCultivo: e.target.value })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900"
+                >
+                  <option value="">Selecciona un resultado...</option>
+                  <option value="positivo">Positivo</option>
+                  <option value="negativo">Negativo</option>
+                  <option value="contaminado">Muestra contaminada / no interpretable</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-slate-800 text-xs font-semibold">Microorganismo aislado</label>
+                <span className="text-slate-500 text-[11px]">Indica el germen reportado por el laboratorio (ej. Escherichia coli, Klebsiella).</span>
+                <input
+                  type="text"
+                  value={form.microorganismo}
+                  onChange={(e) => setForm({ ...form, microorganismo: e.target.value })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-slate-800 text-xs font-semibold">Recuento de colonias y unidades</label>
+                <span className="text-slate-500 text-[11px]">Especifica valor y unidades exactas (ej. &gt; 100.000 UFC/mL).</span>
+                <input
+                  type="text"
+                  value={form.recuentoColonias}
+                  onChange={(e) => setForm({ ...form, recuentoColonias: e.target.value })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-slate-800 text-xs font-semibold">Antibiograma e interpretación</label>
+                <span className="text-slate-500 text-[11px]">Detalla sensibilidad, resistencia o presencia de BLEE según informe.</span>
+                <textarea
+                  rows={3}
+                  value={form.resumenAntibiograma}
+                  onChange={(e) => setForm({ ...form, resumenAntibiograma: e.target.value })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 resize-y"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-slate-800 text-xs font-semibold">Conducta clínica documentada</label>
+                <span className="text-slate-500 text-[11px]">Registra la decisión tomada o el canal donde se indicó el ajuste al paciente.</span>
+                <textarea
+                  rows={2}
+                  value={form.conductaDocumentada}
+                  onChange={(e) => setForm({ ...form, conductaDocumentada: e.target.value })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-900 resize-y"
+                />
+              </div>
+
+              <label className="flex items-start gap-2.5 p-3 bg-amber-50 border border-amber-200 rounded-xl cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.resistenteATratamiento}
+                  onChange={(e) => setForm({ ...form, resistenteATratamiento: e.target.checked })}
+                  className="mt-0.5 w-4 h-4 accent-red-700"
+                />
+                <span className="text-amber-900 text-xs leading-snug">
+                  Marcar alerta de resistencia al tratamiento empírico actual (requiere reevaluación profesional).
+                </span>
+              </label>
+            </div>
+
+            <div className="p-5 border-t border-slate-100">
+              <button
+                type="submit"
+                disabled={saving}
+                className="w-full py-3 bg-red-700 hover:bg-red-800 disabled:opacity-50 transition-colors text-white rounded-xl text-sm font-bold shadow-sm cursor-pointer"
+              >
+                {saving ? 'Guardando revisión...' : 'Guardar revisión y documentar conducta'}
+              </button>
+            </div>
+          </form>
         </div>
-
-      </div>
+      )}
     </main>
   );
 }

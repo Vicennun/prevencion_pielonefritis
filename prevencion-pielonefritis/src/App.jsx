@@ -15,7 +15,7 @@ import PatientAtenciones from './components/PatientAtenciones';
 import PatientFormulario from './components/PatientFormulario';
 import PatientPrevencion from './components/PatientPrevencion';
 import PatientRecordatorios from './components/PatientRecordatorios';
-import PatientTratamientoActivo from './components/PatientTratamientoActivo'; // <-- Arriba
+import PatientTratamientoActivo from './components/PatientTratamientoActivo';
 import PatientExamenes from './components/PatientExamenes';
 
 // Componentes Profesional
@@ -31,58 +31,159 @@ import ProRecordatorios from './components/ProRecordatorios';
 import ProSeguimientoActivo from './components/ProSeguimientoActivo';
 import ProRevisionExamen from './components/ProRevisionExamen';
 
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutos de inactividad
+const PRO_ROLES = ['PROFESIONAL', 'ADMIN', 'DESARROLLADOR'];
+
+function getValidSession() {
+  try {
+    const raw = localStorage.getItem('ceroNefritisUser');
+    if (!raw) {
+      localStorage.removeItem('ceroNefritisLastActive');
+      return null;
+    }
+
+    const user = JSON.parse(raw);
+    if (!user?.id || !user?.rol) {
+      localStorage.removeItem('ceroNefritisUser');
+      localStorage.removeItem('ceroNefritisLastActive');
+      return null;
+    }
+
+    const lastActive = Number(localStorage.getItem('ceroNefritisLastActive') || 0);
+    if (lastActive && Date.now() - lastActive > SESSION_TIMEOUT_MS) {
+      localStorage.removeItem('ceroNefritisUser');
+      localStorage.removeItem('ceroNefritisLastActive');
+      return null;
+    }
+
+    if (!lastActive) {
+      localStorage.setItem('ceroNefritisLastActive', String(Date.now()));
+    }
+
+    return user;
+  } catch {
+    localStorage.removeItem('ceroNefritisUser');
+    localStorage.removeItem('ceroNefritisLastActive');
+    return null;
+  }
+}
+
 export default function App() {
-  // Leemos el hash actual de la URL o por defecto cargamos '#inicio'
   const [currentPath, setCurrentPath] = useState(window.location.hash || '#inicio');
+  const [authNotice, setAuthNotice] = useState('');
 
-  // Escuchamos los cambios en la URL cuando el usuario hace clic en el Sidebar o navega
+  // Escucha cambios en el hash
   useEffect(() => {
-  const handleHashChange = () => {
-    setCurrentPath(window.location.hash || '#inicio');
-  };
-  window.addEventListener('hashchange', handleHashChange);
-  return () => window.removeEventListener('hashchange', handleHashChange);
-}, []);
+    const handleHashChange = () => {
+      setCurrentPath(window.location.hash || '#inicio');
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  // Renueva actividad de sesión y expira automáticamente tras 30 min sin uso
+  useEffect(() => {
+    const touchActivity = () => {
+      if (localStorage.getItem('ceroNefritisUser')) {
+        localStorage.setItem('ceroNefritisLastActive', String(Date.now()));
+      }
+    };
+
+    window.addEventListener('click', touchActivity);
+    window.addEventListener('keydown', touchActivity);
+
+    const timer = setInterval(() => {
+      const raw = localStorage.getItem('ceroNefritisUser');
+      const lastActive = Number(localStorage.getItem('ceroNefritisLastActive') || 0);
+      if (raw && lastActive && Date.now() - lastActive > SESSION_TIMEOUT_MS) {
+        localStorage.removeItem('ceroNefritisUser');
+        localStorage.removeItem('ceroNefritisLastActive');
+        setAuthNotice('Tu sesión expiró por inactividad. Inicia sesión nuevamente.');
+        window.location.hash = '#inicio';
+      }
+    }, 60 * 1000);
+
+    return () => {
+      window.removeEventListener('click', touchActivity);
+      window.removeEventListener('keydown', touchActivity);
+      clearInterval(timer);
+    };
+  }, []);
+
+  // Parseo tolerante a barras iniciales/finales (#/zona/seccion/id)
+  const cleanHash = (currentPath || '#inicio').replace(/^#\/?/, '').split('?')[0];
+  const [root = 'inicio', section = '', rawId = ''] = cleanHash.split('/').filter(Boolean);
+  const routeId = rawId && !Number.isNaN(Number(rawId)) ? Number(rawId) : null;
+
+  const sessionUser = getValidSession();
+  const isPacienteRoute = root === 'paciente';
+  const isProRoute = root === 'profesional';
+
+  // Determinar si corresponde bloquear/redirigir
+  let redirectTarget = null;
+  let noticeMsg = '';
+
+  if (isPacienteRoute || isProRoute) {
+    if (!sessionUser) {
+      redirectTarget = '#inicio';
+      noticeMsg = 'Debes iniciar sesión para acceder a esa sección.';
+    } else if (isPacienteRoute && sessionUser.rol !== 'PACIENTE') {
+      redirectTarget = '#profesional';
+    } else if (isProRoute && !PRO_ROLES.includes(sessionUser.rol)) {
+      redirectTarget = '#paciente';
+    }
+  }
+
+  useEffect(() => {
+    if (redirectTarget) {
+      if (noticeMsg) setAuthNotice(noticeMsg);
+      window.location.hash = redirectTarget;
+    } else if (isPacienteRoute || isProRoute) {
+      setAuthNotice('');
+    }
+  }, [redirectTarget, noticeMsg, isPacienteRoute, isProRoute]);
+
+  // Evita renderizar contenido protegido mientras redirige
+  if (redirectTarget) {
+    return null;
+  }
 
   // ==========================================
-  // 1. ZONA PRIVADA (PACIENTE)
+  // 1. ZONA PRIVADA (PACIENTE — PROTEGIDA)
   // ==========================================
-  // Si el usuario entra a cualquier ruta que empiece con '#paciente'
-  if (currentPath.startsWith('#paciente')) {
+  if (isPacienteRoute) {
     let patientContent;
     let activeTab = 'inicio';
 
-    // Sub-rutas del dashboard del paciente
-    switch (currentPath) {
-      case '#paciente/mensajes':
+    switch (section) {
+      case 'mensajes':
         patientContent = <PatientMensajes />;
         activeTab = 'mensajes';
         break;
-      case '#paciente/atenciones':
+      case 'atenciones':
         patientContent = <PatientAtenciones />;
         activeTab = 'atenciones';
         break;
-      case '#paciente/formulario':
+      case 'formulario':
         patientContent = <PatientFormulario />;
         activeTab = 'formulario';
         break;
-      case '#paciente/prevencion':
+      case 'prevencion':
         patientContent = <PatientPrevencion />;
         activeTab = 'prevencion';
         break;
-      case '#paciente/recordatorios':
+      case 'recordatorios':
         patientContent = <PatientRecordatorios />;
         activeTab = 'recordatorios';
         break;
-      case '#paciente/tratamiento-activo':
+      case 'tratamiento-activo':
         patientContent = <PatientTratamientoActivo />;
         activeTab = 'tratamiento-activo';
         break;
-      case '#paciente/examenes':
+      case 'examenes':
         patientContent = <PatientExamenes />;
         activeTab = 'examenes';
         break;
-      case '#paciente':
       default:
         patientContent = <PatientDashboard />;
         activeTab = 'inicio';
@@ -98,52 +199,49 @@ export default function App() {
   }
 
   // ==========================================
-  // 2. ZONA PRIVADA (PROFESIONAL / MÉDICO)
+  // 2. ZONA PRIVADA (PROFESIONAL — PROTEGIDA)
   // ==========================================
-  // Si el usuario entra a cualquier ruta que empiece con '#profesional'
-  if (currentPath.startsWith('#profesional')) {
+  if (isProRoute) {
     let proContent;
     let activeTab = 'inicio';
 
-    // Sub-rutas del dashboard del profesional (se irán agregando más)
-    switch (currentPath) {
-      case '#profesional/historial':           // <-- Agregamos esta ruta
+    switch (section) {
+      case 'historial':
         proContent = <ProHistorial />;
         activeTab = 'historial';
         break;
-      case '#profesional/detalle-atencion':    // <-- Nueva ruta
-        proContent = <ProDetalleAtencion />;
-        activeTab = 'historial';               // <-- Mantenemos 'historial' encendido en el sidebar
+      case 'detalle-atencion':
+        proContent = <ProDetalleAtencion key={routeId ?? 'at-default'} atencionId={routeId} />;
+        activeTab = 'historial';
         break;
-      case '#profesional/pacientes':           // <-- Nueva ruta
+      case 'pacientes':
         proContent = <ProPacientes />;
         activeTab = 'pacientes';
         break;
-      case '#profesional/detalle-paciente':    // <-- Nueva ruta
-        proContent = <ProDetallePaciente />;
-        activeTab = 'pacientes';               // <-- Mantén la pestaña encendida
+      case 'detalle-paciente':
+        proContent = <ProDetallePaciente key={routeId ?? 'pac-default'} pacienteId={routeId} />;
+        activeTab = 'pacientes';
         break;
-      case '#profesional/mensajes':            // <-- Nueva ruta
-        proContent = <ProMensajes />;
+      case 'mensajes':
+        proContent = <ProMensajes key={routeId ?? 'msg-default'} pacienteInicialId={routeId} />;
         activeTab = 'mensajes';
         break;
-      case '#profesional/prevenciones':        // <-- Nueva ruta
+      case 'prevenciones':
         proContent = <ProPrevenciones />;
         activeTab = 'prevenciones';
         break;
-      case '#profesional/recordatorios':       // <-- ÚLTIMA RUTA!
+      case 'recordatorios':
         proContent = <ProRecordatorios />;
         activeTab = 'recordatorios';
         break;
-      case '#profesional/seguimiento-activo':   // <-- NUEVA RUTA
-        proContent = <ProSeguimientoActivo />;
-        activeTab = 'seguimiento-activo';               // <-- Mantiene el sidebar en pacientes
+      case 'seguimiento-activo':
+        proContent = <ProSeguimientoActivo key={routeId ?? 'seg-default'} pacienteInicialId={routeId} />;
+        activeTab = 'seguimiento-activo';
         break;
-      case '#profesional/revision-examen':
-        proContent = <ProRevisionExamen />;
-        activeTab = 'seguimiento-activo'; // Mantiene iluminado el menú actual
+      case 'revision-examen':
+        proContent = <ProRevisionExamen key={routeId ?? 'ex-default'} examenId={routeId} />;
+        activeTab = 'seguimiento-activo';
         break;
-      case '#profesional':
       default:
         proContent = <ProDashboard />;
         activeTab = 'inicio';
@@ -159,53 +257,58 @@ export default function App() {
   }
 
   // ==========================================
-  // 3. ZONA PÚBLICA (LANDING / REGISTRO)
+  // 3. ZONA PÚBLICA (LANDING / LOGIN / REGISTRO)
   // ==========================================
   let content;
   let sidebarProps = {};
 
-  switch (currentPath) {
-    case '#mision':
+  switch (root) {
+    case 'mision':
       content = <Mision />;
       sidebarProps = {
         activeTab: 'mision',
         title: 'Detectar a tiempo lo que empieza como una infección simple.',
-        description: 'Acompañamos a pacientes y profesionales para que una infección urinaria no avance hasta convertirse en complicación mayor.'
+        description: 'Acompañamos a pacientes y profesionales para que una infección urinaria no avance hasta convertirse en complicación mayor.',
       };
       break;
-    case '#vision':
+    case 'vision':
       content = <Vision />;
       sidebarProps = {
         activeTab: 'vision',
         title: 'Actuar antes de que la infección alcance el riñón.',
-        description: 'Una plataforma donde cada paciente de riesgo tiene su historial, sus alertas y a su equipo de salud al alcance.'
+        description: 'Una plataforma donde cada paciente de riesgo tiene su historial, sus alertas y a su equipo de salud al alcance.',
       };
       break;
-    case '#por-que':
+    case 'por-que':
       content = <PorQue />;
       sidebarProps = {
         activeTab: 'por-que',
         title: 'Organizar un historial permite anticipar el riesgo.',
-        description: 'La atención suele llegar cuando ya hay síntomas. El seguimiento preventivo controla y mitiga ese momento.'
+        description: 'La atención suele llegar cuando ya hay síntomas. El seguimiento preventivo controla y mitiga ese momento.',
       };
       break;
-    case '#inicio':
     default:
-      // Dejamos el RegisterForm envolviéndolo en un main para mantener la estructura flex
       content = (
-        <main className="flex-1 bg-neutral-100 min-h-screen flex flex-col justify-center items-center p-8">
+        <main className="flex-1 bg-neutral-100 min-h-screen flex flex-col justify-center items-center p-8 gap-4">
+          {authNotice && (
+            <div
+              role="alert"
+              className="w-full max-w-md px-4 py-3 bg-amber-50 border border-amber-300 rounded-xl text-amber-900 text-xs font-semibold text-center"
+            >
+              {authNotice}
+            </div>
+          )}
           <RegisterForm />
         </main>
       );
       sidebarProps = {
         activeTab: 'inicio',
         title: 'Prevención y seguimiento, más cerca de cada paciente.',
-        description: 'Conecta a pacientes y profesionales para detectar riesgos a tiempo, dar indicaciones claras y mantener la comunicación en un solo lugar.'
+        description: 'Conecta a pacientes y profesionales para detectar riesgos a tiempo, dar indicaciones claras y mantener la comunicación en un solo lugar.',
       };
       break;
   }
 
-  // Retorno del layout público por defecto
   return (
     <div className="flex flex-col lg:flex-row w-full min-h-screen bg-neutral-100">
       <SidebarBanner {...sidebarProps} />

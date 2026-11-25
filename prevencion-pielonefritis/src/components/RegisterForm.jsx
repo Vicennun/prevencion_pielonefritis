@@ -3,8 +3,22 @@ import RoleSelector from './RoleSelector';
 import InputField from './InputField';
 import { api } from '../services/api';
 
+const ROLE_TO_DB = {
+  paciente: 'PACIENTE',
+  profesional: 'PROFESIONAL',
+  administrador: 'ADMIN',
+  desarrollador: 'DESARROLLADOR',
+};
+
+const DB_TO_LABEL = {
+  PACIENTE: 'Paciente',
+  PROFESIONAL: 'Profesional',
+  ADMIN: 'Administrador',
+  DESARROLLADOR: 'Desarrollador',
+};
+
 export default function RegisterForm() {
-  const [isLogin, setIsLogin] = useState(false);
+  const [isLogin, setIsLogin] = useState(false); // Arranca en "Crear cuenta" como la versión original
   const [role, setRole] = useState('paciente');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,14 +33,34 @@ export default function RegisterForm() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleToggleMode = () => {
-    setIsLogin((prev) => !prev);
+  const handleModeChange = (loginMode) => {
+    setIsLogin(loginMode);
     setError('');
+  };
+
+  const handleRoleSelect = (newRole) => {
+    setRole(newRole);
+    if (error) setError('');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (!formData.email.trim() || !formData.password.trim()) {
+      setError('Ingresa tu correo electrónico y contraseña.');
+      return;
+    }
+    if (!isLogin && !formData.fullName.trim()) {
+      setError('Ingresa tu nombre completo para crear la cuenta.');
+      return;
+    }
+    if (!isLogin && formData.password.length < 8) {
+      setError('La contraseña debe tener al menos 8 caracteres.');
+      return;
+    }
+
+    const rolEsperado = ROLE_TO_DB[role] || 'PACIENTE';
     setLoading(true);
 
     try {
@@ -39,13 +73,21 @@ export default function RegisterForm() {
             nombreCompleto: formData.fullName,
             email: formData.email,
             password: formData.password,
-            rol: role.toUpperCase(), // PACIENTE, PROFESIONAL, ADMINISTRADOR, DESARROLLADOR
+            rol: rolEsperado,
           });
+
+      // En login, valida que la cuenta pertenezca al rol seleccionado
+      if (isLogin && usuario.rol !== rolEsperado) {
+        setError(
+          `Esta cuenta corresponde al rol "${DB_TO_LABEL[usuario.rol] || usuario.rol}". Selecciona ese rol arriba para ingresar.`
+        );
+        return;
+      }
 
       localStorage.setItem('ceroNefritisUser', JSON.stringify(usuario));
 
       window.location.hash =
-        usuario.rol === 'PROFESIONAL' ? '#profesional' : '#paciente';
+        usuario.rol === 'PACIENTE' ? '#paciente' : '#profesional';
     } catch (err) {
       setError(err.message || 'Ocurrió un error al procesar la solicitud.');
     } finally {
@@ -59,26 +101,50 @@ export default function RegisterForm() {
         <form
           onSubmit={handleSubmit}
           noValidate
-          className="w-96 flex flex-col justify-start items-start gap-5"
+          className="w-full flex flex-col justify-start items-start gap-5"
         >
+          {/* Pestañas claras: Crear cuenta / Iniciar sesión */}
+          <div className="w-full p-1 bg-slate-100 rounded-xl grid grid-cols-2 gap-1">
+            <button
+              type="button"
+              onClick={() => handleModeChange(false)}
+              className={`py-2.5 text-sm font-semibold font-['Inter'] rounded-lg transition-all cursor-pointer ${
+                !isLogin
+                  ? 'bg-white text-teal-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Crear cuenta
+            </button>
+            <button
+              type="button"
+              onClick={() => handleModeChange(true)}
+              className={`py-2.5 text-sm font-semibold font-['Inter'] rounded-lg transition-all cursor-pointer ${
+                isLogin
+                  ? 'bg-white text-teal-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Iniciar sesión
+            </button>
+          </div>
+
           {/* Encabezado */}
-          <div className="w-full flex flex-col justify-start items-start gap-1.5">
+          <div className="w-full flex flex-col justify-start items-start gap-1">
             <h2 className="text-[#0F172A] text-3xl font-bold font-['Inter']">
               {isLogin ? 'Inicia sesión' : 'Crea tu cuenta'}
             </h2>
             <p className="text-[#64748B] text-sm font-normal font-['Inter']">
               {isLogin
-                ? 'Ingresa tus credenciales para continuar'
-                : 'Elige cómo vas a usar la plataforma'}
+                ? 'Selecciona tu perfil e ingresa tus credenciales'
+                : 'Elige tu rol y completa tus datos para registrarte'}
             </p>
           </div>
 
-          {/* Selector de Roles (solo en registro) */}
-          {!isLogin && (
-            <RoleSelector selectedRole={role} onSelectRole={setRole} />
-          )}
+          {/* Selector de Roles visible en ambos modos */}
+          <RoleSelector selectedRole={role} onSelectRole={handleRoleSelect} />
 
-          {/* Campos */}
+          {/* Nombre completo (solo en registro) */}
           {!isLogin && (
             <InputField
               label="Nombre completo"
@@ -104,7 +170,6 @@ export default function RegisterForm() {
             onChange={(e) => handleInputChange('password', e.target.value)}
           />
 
-          {/* Mensaje de error */}
           {error && (
             <div
               role="alert"
@@ -114,7 +179,6 @@ export default function RegisterForm() {
             </div>
           )}
 
-          {/* Botón principal */}
           <button
             type="submit"
             disabled={loading}
@@ -127,14 +191,13 @@ export default function RegisterForm() {
                 : 'Crear cuenta'}
           </button>
 
-          {/* Alternar Login / Registro */}
           <div className="w-full flex justify-center items-center gap-1.5 pt-1">
             <span className="text-[#64748B] text-sm font-normal font-['Inter']">
               {isLogin ? '¿No tienes cuenta?' : '¿Ya tienes cuenta?'}
             </span>
             <button
               type="button"
-              onClick={handleToggleMode}
+              onClick={() => handleModeChange(!isLogin)}
               className="text-[#0F766E] hover:underline text-sm font-semibold font-['Inter'] cursor-pointer"
             >
               {isLogin ? 'Regístrate' : 'Inicia sesión'}
@@ -142,7 +205,6 @@ export default function RegisterForm() {
           </div>
         </form>
 
-        {/* Disclaimer médico */}
         <p className="w-full max-w-[420px] text-center text-slate-500 text-xs sm:text-sm font-normal font-['Inter'] leading-relaxed pt-2">
           Esta herramienta apoya el seguimiento y la prevención de pielonefritis. No realiza diagnósticos, no prescribe tratamientos y bajo ningún caso reemplaza la evaluación de un profesional de la salud.
         </p>
