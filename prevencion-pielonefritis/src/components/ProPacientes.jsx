@@ -176,7 +176,7 @@ export default function ProPacientes() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4 shrink-0">
         <div className="flex flex-col gap-1">
-          <h1 className="text-red-700 text-3xl font-bold font-['Inter']">Panel de pacientes</h1>
+          <h1 className="text-blue-800 text-3xl font-bold font-['Inter']">Panel de pacientes</h1>
           <p className="text-slate-500 text-sm font-normal font-['Inter']">
             {rows.length} pacientes registrados · ordenados automáticamente por prioridad clínica determinista
           </p>
@@ -191,7 +191,7 @@ export default function ProPacientes() {
           </button>
           <button
             onClick={() => setShowNewModal(true)}
-            className="px-4 py-3 bg-red-700 hover:bg-red-800 transition-colors rounded-[10px] text-white text-sm font-semibold cursor-pointer"
+            className="px-4 py-3 bg-blue-700 hover:bg-blue-800 transition-colors rounded-[10px] text-white text-sm font-semibold cursor-pointer"
           >
             + Nuevo paciente
           </button>
@@ -214,7 +214,7 @@ export default function ProPacientes() {
           </div>
           <a
             href="#profesional/seguimiento-activo"
-            className="px-4 py-2.5 bg-red-700 hover:bg-red-800 transition-colors rounded-[10px] text-white text-xs font-semibold shrink-0"
+            className="px-4 py-2.5 bg-blue-700 hover:bg-blue-800 transition-colors rounded-[10px] text-white text-xs font-semibold shrink-0"
           >
             Ir al Monitor Clínico
           </a>
@@ -250,7 +250,7 @@ export default function ProPacientes() {
               onClick={() => setActiveFilter(f.id)}
               className={`px-3.5 py-2 rounded-full border transition-colors text-xs font-semibold cursor-pointer ${
                 activeFilter === f.id
-                  ? 'bg-red-700 text-white border-transparent'
+                  ? 'bg-blue-700 text-white border-transparent'
                   : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
               }`}
             >
@@ -435,7 +435,7 @@ export default function ProPacientes() {
               <button
                 type="submit"
                 disabled={saving}
-                className="px-5 py-2 bg-red-700 hover:bg-red-800 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                className="px-5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold cursor-pointer"
               >
                 {saving ? 'Guardando...' : 'Crear paciente'}
               </button>

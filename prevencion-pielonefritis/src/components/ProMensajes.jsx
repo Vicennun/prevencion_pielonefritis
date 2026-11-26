@@ -166,7 +166,7 @@ export default function ProMensajes({ pacienteInicialId }) {
     <main className="flex-1 bg-neutral-200 min-h-screen p-4 lg:p-8 flex flex-col gap-5 overflow-hidden">
       {/* Header */}
       <div className="flex flex-col gap-1 shrink-0">
-        <h1 className="text-red-700 text-3xl font-bold font-['Inter']">Mensajes</h1>
+        <h1 className="text-blue-700 text-3xl font-bold font-['Inter']">Mensajes</h1>
         <p className="text-slate-600 text-sm">
           Comunícate con tus pacientes priorizados y revisa imágenes clínicas compartidas.
         </p>
@@ -195,7 +195,7 @@ export default function ProMensajes({ pacienteInicialId }) {
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-                    activeTab === tab ? 'bg-white text-red-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'
+                    activeTab === tab ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'
                   }`}
                 >
                   {tab}
@@ -215,11 +215,11 @@ export default function ProMensajes({ pacienteInicialId }) {
                   onClick={() => setSelectedPacId(chat.id)}
                   className={`w-full p-3 transition-colors rounded-xl flex items-start gap-3 text-left border cursor-pointer ${
                     isSelected
-                      ? 'bg-red-50 border-red-200'
+                      ? 'bg-blue-50 border-blue-200'
                       : 'bg-white border-transparent hover:border-slate-200'
                   }`}
                 >
-                  <div className="w-10 h-10 shrink-0 rounded-full bg-red-100 text-red-700 flex justify-center items-center text-xs font-bold">
+                  <div className="w-10 h-10 shrink-0 rounded-full bg-blue-100 text-blue-700 flex justify-center items-center text-xs font-bold">
                     {getInitials(chat.nombreCompleto)}
                   </div>
 
@@ -238,7 +238,7 @@ export default function ProMensajes({ pacienteInicialId }) {
                     </span>
                   </div>
 
-                  {chat.unread && <div className="w-2 h-2 mt-1.5 bg-red-600 rounded-full shrink-0" />}
+                  {chat.unread && <div className="w-2 h-2 mt-1.5 bg-blue-600 rounded-full shrink-0" />}
                 </button>
               );
             })}
@@ -251,7 +251,7 @@ export default function ProMensajes({ pacienteInicialId }) {
             <>
               <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 shrink-0 bg-red-100 rounded-full flex justify-center items-center text-red-700 text-sm font-bold">
+                  <div className="w-10 h-10 shrink-0 bg-blue-100 rounded-full flex justify-center items-center text-blue-700 text-sm font-bold">
                     {getInitials(activePac.nombreCompleto)}
                   </div>
                   <div className="flex flex-col">
@@ -265,7 +265,7 @@ export default function ProMensajes({ pacienteInicialId }) {
                 <div className="flex items-center gap-3">
                   <a
                     href={`#profesional/seguimiento-activo/${activePac.id}`}
-                    className="text-red-700 hover:underline text-xs font-semibold"
+                    className="text-blue-700 hover:underline text-xs font-semibold"
                   >
                     Monitor
                   </a>
@@ -292,7 +292,7 @@ export default function ProMensajes({ pacienteInicialId }) {
                         <div
                           className={`rounded-2xl px-4 py-3 max-w-[85%] sm:max-w-[70%] flex flex-col gap-2 ${
                             esMio
-                              ? 'bg-red-700 text-white rounded-tr-sm'
+                              ? 'bg-blue-700 text-white rounded-tr-sm'
                               : 'bg-white border border-slate-200 text-slate-900 rounded-tl-sm'
                           }`}
                         >
@@ -306,7 +306,7 @@ export default function ProMensajes({ pacienteInicialId }) {
                             </a>
                           )}
                           {m.contenido && <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.contenido}</p>}
-                          <span className={`text-[10px] ${esMio ? 'text-red-200 text-right' : 'text-slate-400'}`}>
+                          <span className={`text-[10px] ${esMio ? 'text-blue-200 text-right' : 'text-slate-400'}`}>
                             {new Date(m.fecha_envio).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
@@ -323,7 +323,7 @@ export default function ProMensajes({ pacienteInicialId }) {
                   <button
                     type="button"
                     onClick={() => setShowQuickReplies((v) => !v)}
-                    className="text-xs font-semibold text-red-700 hover:underline cursor-pointer"
+                    className="text-xs font-semibold text-blue-700 hover:underline cursor-pointer"
                   >
                     {showQuickReplies ? 'Ocultar respuestas rápidas' : '+ Respuestas rápidas clínicas'}
                   </button>
@@ -342,7 +342,7 @@ export default function ProMensajes({ pacienteInicialId }) {
                           setTexto(mr.texto);
                           setShowQuickReplies(false);
                         }}
-                        className="px-2.5 py-1 bg-slate-100 hover:bg-red-50 hover:text-red-700 border border-slate-200 rounded-full text-[11px] font-semibold text-slate-700 shrink-0 cursor-pointer"
+                        className="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 border border-slate-200 rounded-full text-[11px] font-semibold text-slate-700 shrink-0 cursor-pointer"
                       >
                         {mr.corto}
                       </button>
@@ -354,7 +354,7 @@ export default function ProMensajes({ pacienteInicialId }) {
               {/* Input Area */}
               <form onSubmit={handleEnviar} className="px-4 sm:px-6 py-3 flex flex-col gap-2 shrink-0 bg-white">
                 {imagenFile && (
-                  <div className="flex items-center justify-between px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-900">
+                  <div className="flex items-center justify-between px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900">
                     <span className="truncate">Imagen adjunta: {imagenFile.name}</span>
                     <button
                       type="button"
@@ -362,7 +362,7 @@ export default function ProMensajes({ pacienteInicialId }) {
                         setImagenFile(null);
                         if (fileInputRef.current) fileInputRef.current.value = '';
                       }}
-                      className="text-red-700 font-semibold ml-3 cursor-pointer"
+                      className="text-blue-700 font-semibold ml-3 cursor-pointer"
                     >
                       Quitar
                     </button>
@@ -389,12 +389,12 @@ export default function ProMensajes({ pacienteInicialId }) {
                     value={texto}
                     onChange={(e) => setTexto(e.target.value)}
                     placeholder="Escribe un mensaje al paciente..."
-                    className="flex-1 min-w-[180px] px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-red-700"
+                    className="flex-1 min-w-[180px] px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-700"
                   />
                   <button
                     type="submit"
                     disabled={sending || (!texto.trim() && !imagenFile)}
-                    className="px-6 py-2.5 bg-red-700 hover:bg-red-800 disabled:opacity-50 rounded-xl text-white text-sm font-semibold shrink-0 shadow-sm cursor-pointer"
+                    className="px-6 py-2.5 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 rounded-xl text-white text-sm font-semibold shrink-0 shadow-sm cursor-pointer"
                   >
                     {sending ? 'Enviando...' : 'Enviar'}
                   </button>

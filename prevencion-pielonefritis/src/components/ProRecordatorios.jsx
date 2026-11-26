@@ -137,7 +137,7 @@ export default function ProRecordatorios() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
         <div className="flex flex-col gap-1">
-          <h1 className="text-red-700 text-3xl font-bold font-['Inter']">Centro de Comando Clínico</h1>
+          <h1 className="text-blue-800 text-3xl font-bold font-['Inter']">Centro de Comando Clínico</h1>
           <p className="text-slate-600 text-sm">
             Gestiona tus tareas, revisa alertas clínicas y envía recordatorios directos a tus pacientes.
           </p>
@@ -151,7 +151,7 @@ export default function ProRecordatorios() {
           </button>
           <button
             onClick={() => setModalMode('enviado')}
-            className="flex-1 sm:flex-none px-4 py-3 bg-red-700 hover:bg-red-800 rounded-[10px] text-white text-sm font-semibold shadow-sm cursor-pointer"
+            className="flex-1 sm:flex-none px-4 py-3 bg-blue-700 hover:bg-blue-800 rounded-[10px] text-white text-sm font-semibold shadow-sm cursor-pointer"
           >
             Enviar a paciente
           </button>
@@ -187,7 +187,7 @@ export default function ProRecordatorios() {
               onClick={() => setActiveTab(tab)}
               className={`flex-1 py-4 text-sm font-semibold transition-colors border-b-2 cursor-pointer ${
                 activeTab === tab
-                  ? 'border-red-700 text-red-700 bg-white'
+                  ? 'border-blue-700 text-blue-700 bg-white'
                   : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-100'
               }`}
             >
@@ -231,7 +231,7 @@ export default function ProRecordatorios() {
                   {task.tipo === 'examen' && (
                     <a
                       href="#profesional/revision-examen"
-                      className="px-3.5 py-2 bg-red-700 hover:bg-red-800 text-white rounded-lg text-xs font-semibold"
+                      className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold"
                     >
                       Revisar examen
                     </a>
@@ -353,7 +353,7 @@ export default function ProRecordatorios() {
               <button
                 type="submit"
                 disabled={saving}
-                className="px-5 py-2 bg-red-700 hover:bg-red-800 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                className="px-5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold cursor-pointer"
               >
                 {saving ? 'Guardando...' : modalMode === 'enviado' ? 'Enviar recordatorio' : 'Crear tarea'}
               </button>

@@ -101,14 +101,14 @@ export default function ProPrevenciones() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
         <div className="flex flex-col gap-1">
-          <h1 className="text-red-700 text-3xl font-bold font-['Inter']">Lista de prevenciones</h1>
+          <h1 className="text-blue-700 text-3xl font-bold font-['Inter']">Lista de prevenciones</h1>
           <p className="text-slate-600 text-sm">
             Gestiona la base de conocimientos preventivos. Las pautas en estado «Activa» se muestran inmediatamente a los pacientes.
           </p>
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="px-4 py-3 bg-red-700 hover:bg-red-800 transition-colors rounded-[10px] text-white text-sm font-semibold shadow-sm shrink-0 flex items-center gap-2 cursor-pointer"
+          className="px-4 py-3 bg-blue-700 hover:bg-blue-800 transition-colors rounded-[10px] text-white text-sm font-semibold shadow-sm shrink-0 flex items-center gap-2 cursor-pointer"
         >
           <span className="text-lg leading-none">+</span> Nueva indicación
         </button>
@@ -123,7 +123,7 @@ export default function ProPrevenciones() {
               onClick={() => setActiveTab(tab)}
               className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
                 activeTab === tab
-                  ? 'bg-white text-red-700 shadow-sm border border-slate-200'
+                  ? 'bg-white text-blue-700 shadow-sm border border-slate-200'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-zinc-200'
               }`}
             >
@@ -279,7 +279,7 @@ export default function ProPrevenciones() {
               <button
                 type="submit"
                 disabled={saving}
-                className="px-5 py-2 bg-red-700 hover:bg-red-800 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                className="px-5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold cursor-pointer"
               >
                 {saving ? 'Guardando...' : 'Guardar indicación'}
               </button>

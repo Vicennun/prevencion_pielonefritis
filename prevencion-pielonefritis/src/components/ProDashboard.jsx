@@ -73,7 +73,7 @@ export default function ProDashboard() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0 relative">
         <div className="flex flex-col gap-1">
-          <h1 className="text-red-700 text-3xl font-bold font-['Inter']">Saludos, {primerNombre}</h1>
+          <h1 className="text-blue-800 text-3xl font-bold font-['Inter']">Saludos, {primerNombre}</h1>
           <p className="text-slate-600 text-sm font-normal font-['Inter']">
             Panel de gestión clínica · Seguimiento y prevención de pielonefritis
           </p>
@@ -128,7 +128,7 @@ export default function ProDashboard() {
           <section className="p-6 bg-zinc-100 rounded-2xl border border-zinc-300 flex flex-col gap-4">
             <div className="flex justify-between items-center gap-2">
               <div className="flex items-center gap-2.5">
-                <h2 className="text-red-700 text-lg font-bold font-['Inter']">Pacientes prioritarios en seguimiento</h2>
+                <h2 className="text-blue-800 text-lg font-bold font-['Inter']">Pacientes prioritarios en seguimiento</h2>
                 <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
                   {seguimientos.length} activos
                 </span>
@@ -168,7 +168,7 @@ export default function ProDashboard() {
           {/* Últimas Atenciones */}
           <section className="p-6 bg-zinc-100 rounded-2xl border border-zinc-300 flex flex-col gap-4">
             <div className="flex justify-between items-center w-full">
-              <h2 className="text-red-700 text-lg font-bold font-['Inter']">Atenciones recientes</h2>
+              <h2 className="text-blue-800 text-lg font-bold font-['Inter']">Atenciones recientes</h2>
               <a href="#profesional/historial" className="text-slate-600 hover:text-red-700 text-xs font-semibold hover:underline">
                 Ver historial
               </a>
@@ -204,7 +204,7 @@ export default function ProDashboard() {
           {/* Exámenes pendientes de revisión */}
           <section className="p-6 bg-zinc-100 rounded-2xl border border-zinc-300 flex flex-col gap-3">
             <div className="flex justify-between items-center">
-              <h2 className="text-red-700 text-base font-bold font-['Inter']">Urocultivos y exámenes</h2>
+              <h2 className="text-blue-800 text-base font-bold font-['Inter']">Urocultivos y exámenes</h2>
               <span className="px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-bold">
                 {examenesPendientes.length} pendientes
               </span>
@@ -227,7 +227,7 @@ export default function ProDashboard() {
           {/* Mensajes Recientes */}
           <section className="p-6 bg-zinc-100 rounded-2xl border border-zinc-300 flex flex-col gap-3">
             <div className="flex justify-between items-center">
-              <h2 className="text-red-700 text-lg font-bold font-['Inter']">Mensajes</h2>
+              <h2 className="text-blue-800 text-lg font-bold font-['Inter']">Mensajes</h2>
               <span className="px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-semibold">
                 {noLeidos} sin leer
               </span>
@@ -253,7 +253,7 @@ export default function ProDashboard() {
           {/* Tareas y Recordatorios */}
           <section className="p-6 bg-zinc-100 rounded-2xl border border-zinc-300 flex flex-col gap-3">
             <div className="flex justify-between items-center">
-              <h2 className="text-red-700 text-base font-bold font-['Inter']">Centro de Comando</h2>
+              <h2 className="text-blue-800 text-base font-bold font-['Inter']">Centro de Comando</h2>
               <a href="#profesional/recordatorios" className="text-slate-600 text-xs font-semibold hover:underline">
                 Gestionar
               </a>

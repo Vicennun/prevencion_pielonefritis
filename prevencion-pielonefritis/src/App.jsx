@@ -6,6 +6,9 @@ import RegisterForm from './components/RegisterForm';
 import Mision from './components/Mision';
 import Vision from './components/Vision';
 import PorQue from './components/PorQue';
+import PublicFreeGuide from './components/PublicFreeGuide';
+import PublicAutochequeo from './components/PublicAutochequeo';
+import AccessibilityBar from './components/AccessibilityBar';
 
 // Componentes Paciente
 import PatientSidebar from './components/PatientSidebar';
@@ -194,6 +197,7 @@ export default function App() {
       <div className="flex flex-col lg:flex-row w-full min-h-screen bg-neutral-100">
         <PatientSidebar activeTab={activeTab} />
         {patientContent}
+        <AccessibilityBar />
       </div>
     );
   }
@@ -252,17 +256,34 @@ export default function App() {
       <div className="flex flex-col lg:flex-row w-full min-h-screen bg-neutral-200">
         <ProSidebar activeTab={activeTab} />
         {proContent}
+        <AccessibilityBar />
       </div>
     );
   }
 
   // ==========================================
-  // 3. ZONA PÚBLICA (LANDING / LOGIN / REGISTRO)
+  // 3. ZONA PÚBLICA (ACCESO LIBRE / LOGIN / REGISTRO)
   // ==========================================
   let content;
   let sidebarProps = {};
 
   switch (root) {
+    case 'prevencion-gratis':
+      content = <PublicFreeGuide />;
+      sidebarProps = {
+        activeTab: 'prevencion-gratis',
+        title: 'Información clara y gratuita para cuidar tus riñones.',
+        description: 'Revisa pautas validadas de prevención y aprende cuándo pedir atención presencial sin necesidad de crear cuenta.',
+      };
+      break;
+    case 'autochequeo':
+      content = <PublicAutochequeo />;
+      sidebarProps = {
+        activeTab: 'autochequeo',
+        title: 'Orientación rápida basada en señales clínicas.',
+        description: 'Verifica tus síntomas hoy. Si necesitas seguimiento continuo o derivación a un profesional, crea tu cuenta gratis.',
+      };
+      break;
     case 'mision':
       content = <Mision />;
       sidebarProps = {
@@ -313,6 +334,7 @@ export default function App() {
     <div className="flex flex-col lg:flex-row w-full min-h-screen bg-neutral-100">
       <SidebarBanner {...sidebarProps} />
       {content}
+      <AccessibilityBar />
     </div>
   );
 }

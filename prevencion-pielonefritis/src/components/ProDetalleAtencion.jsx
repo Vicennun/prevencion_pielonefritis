@@ -131,7 +131,7 @@ export default function ProDetalleAtencion({ atencionId }) {
       {/* Header */}
       <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4 shrink-0">
         <div className="flex flex-col gap-1">
-          <h1 className="text-red-700 text-3xl font-bold font-['Inter']">{atencion.titulo}</h1>
+          <h1 className="text-blue-800 text-3xl font-bold font-['Inter']">{atencion.titulo}</h1>
           <p className="text-slate-600 text-sm">
             Atención {atencion.codigo_atencion} · <span className="capitalize">{atencion.tipo}</span> · {pac.nombre_completo || 'Paciente'}
           </p>

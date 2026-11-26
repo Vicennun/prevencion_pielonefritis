@@ -59,7 +59,7 @@ export default function ProHistorial() {
 
   const getGravedadClasses = (gravedad = '') => {
     const g = gravedad.toLowerCase();
-    if (g.includes('urgencia')) return 'bg-red-700 text-white';
+    if (g.includes('urgencia')) return 'bg-blue-700 text-white';
     if (g.includes('rojo') || g.includes('extremo')) return 'bg-red-100 text-red-700';
     if (g.includes('amarillo') || g.includes('alto') || g.includes('moderado')) return 'bg-amber-100 text-amber-800';
     if (g.includes('verde') || g.includes('bajo')) return 'bg-green-100 text-green-700';
@@ -78,7 +78,7 @@ export default function ProHistorial() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4 shrink-0">
         <div className="flex flex-col gap-1">
-          <h1 className="text-red-700 text-3xl font-bold font-['Inter']">Historial de atenciones</h1>
+          <h1 className="text-blue-800 text-3xl font-bold font-['Inter']">Historial de atenciones</h1>
           <p className="text-slate-500 text-sm font-normal font-['Inter']">
             Administra, gestiona y revisa las atenciones clínicas registradas en la plataforma.
           </p>
@@ -93,7 +93,7 @@ export default function ProHistorial() {
           </a>
           <a
             href="#profesional/pacientes"
-            className="px-4 py-3 bg-red-700 hover:bg-red-800 transition-colors rounded-[10px] text-white text-sm font-semibold shrink-0"
+            className="px-4 py-3 bg-blue-700 hover:bg-blue-800 transition-colors rounded-[10px] text-white text-sm font-semibold shrink-0"
           >
             Ver pacientes
           </a>
@@ -119,7 +119,7 @@ export default function ProHistorial() {
               onClick={() => setActiveFilter(filter.label)}
               className={`px-3.5 py-2 rounded-full border transition-colors text-xs font-semibold cursor-pointer ${
                 activeFilter === filter.label
-                  ? 'bg-red-700 text-white border-transparent'
+                  ? 'bg-blue-700 text-white border-transparent'
                   : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
               }`}
             >

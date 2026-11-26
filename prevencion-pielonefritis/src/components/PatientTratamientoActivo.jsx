@@ -6,12 +6,16 @@ import { PRIORIDAD_META, formatearHidratacion } from '../services/clinicalEngine
 const CHECKIN_INICIAL = {
   temperatura: '',
   dolorLumbar: '',
+  dolorLocalizacion: '',
+  dolorEvolucion: '',
   mlHidratacion: '',
   glucosaCapilar: '',
   tomoTratamiento: '',
+  efectosAdversos: '',
   dolorFlanco: false,
   escalofriosTemblor: false,
   vomitosPersistentes: false,
+  disminucionOrina: false,
   sintomasUrinarios: false,
   sangreOrina: false,
   coagulosRetencion: false,
@@ -25,6 +29,7 @@ export default function PatientTratamientoActivo() {
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [feedback, setFeedback] = useState('');
+  const [derivacionNotificada, setDerivacionNotificada] = useState(false);
 
   const [usuario, setUsuario] = useState(getStoredUser());
   const [seguimiento, setSeguimiento] = useState(null);
@@ -63,19 +68,22 @@ export default function PatientTratamientoActivo() {
     e.preventDefault();
     setSaving(true);
     setFeedback('');
+    setDerivacionNotificada(false);
+
     try {
       const pacienteId = usuario?.id || getStoredUser()?.id || 3;
       const actualizado = await api.registrarCheckin(pacienteId, {
         ...checkinForm,
         toleraLiquidosMedicamentos: !checkinForm.vomitosPersistentes,
-        tomoTratamiento: checkinForm.tomoTratamiento !== 'no',
+        tomoTratamiento: checkinForm.tomoTratamiento === '' ? true : checkinForm.tomoTratamiento !== 'no',
       });
       setSeguimiento(actualizado);
       const hist = await api.getCheckins(actualizado.id);
       setCheckins(hist || []);
       setCheckinForm(CHECKIN_INICIAL);
       setShowForm(false);
-      setFeedback('Chequeo diario registrado y semáforo actualizado.');
+      setDerivacionNotificada(Boolean(actualizado.derivacionActivada));
+      setFeedback('Chequeo diario registrado con fecha y hora. Semáforo actualizado.');
     } catch (err) {
       setFeedback(`Error al guardar: ${err.message}`);
     } finally {
@@ -91,6 +99,12 @@ export default function PatientTratamientoActivo() {
     ? Math.min(100, Math.round(((seguimiento.dia_actual || 1) / (seguimiento.total_dias || 7)) * 100))
     : 0;
 
+  const metaMl = Number(usuario?.metaHidricaMl || 1750);
+  const mlActual = Number(seguimiento?.ml_hidratacion || 0);
+  const alcanzoMetaSegura = !usuario?.restriccionHidrica && mlActual >= metaMl && mlActual > 0;
+  const limitesNut = usuario?.limites_nutricionales || {};
+  const tieneLimitesNut = Boolean(limitesNut.sodio || limitesNut.proteinas || limitesNut.carbohidratos);
+
   if (loading) {
     return (
       <main className="flex-1 bg-neutral-100 min-h-screen p-8 flex items-center justify-center">
@@ -100,7 +114,7 @@ export default function PatientTratamientoActivo() {
   }
 
   return (
-    <main className="flex-1 bg-neutral-100 min-h-screen p-4 lg:p-8 flex flex-col gap-6 overflow-y-auto relative">
+    <main className="flex-1 bg-neutral-100 min-h-screen p-4 lg:p-8 flex flex-col gap-6 overflow-y-auto pb-16 relative">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0 relative">
         <div className="flex flex-col gap-1">
@@ -108,10 +122,10 @@ export default function PatientTratamientoActivo() {
             SEGUIMIENTO EN CURSO
           </span>
           <h1 className="text-slate-900 text-3xl font-bold font-['Inter']">Hola, {primerNombre}</h1>
-          <p className="text-slate-500 text-sm font-normal font-['Inter']">
+          <p className="text-slate-600 text-sm font-normal font-['Inter']">
             {seguimiento
               ? `Seguimiento activo: ${seguimiento.diagnostico}. Registra tus síntomas diarios para mantener informado a tu equipo de salud.`
-              : 'Registra tu chequeo diario de síntomas e hidratación para iniciar el monitoreo.'}
+              : 'Registra tu chequeo diario de síntomas e hidratación para activar el seguimiento.'}
           </p>
         </div>
 
@@ -133,7 +147,19 @@ export default function PatientTratamientoActivo() {
         </div>
       )}
 
-      {/* Semáforo Actual del Paciente */}
+      {/* Aviso de Derivación Automática */}
+      {derivacionNotificada && (
+        <div className="p-4 bg-red-50 border-2 border-red-400 rounded-2xl flex flex-col gap-1">
+          <span className="text-red-900 text-xs font-bold uppercase">
+            Derivación automática activada · Todos notificados
+          </span>
+          <p className="text-red-800 text-sm">
+            Tu equipo profesional recibió esta alerta prioritaria en su Centro de Comando y bandeja de mensajes, y se creó un recordatorio en tu cuenta. Sigue las indicaciones de seguridad sin suspender tu tratamiento por cuenta propia.
+          </p>
+        </div>
+      )}
+
+      {/* Semáforo Actual */}
       <div className={`p-6 bg-white rounded-2xl border-2 ${meta.border} shadow-sm flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4`}>
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2.5">
@@ -141,12 +167,12 @@ export default function PatientTratamientoActivo() {
               {meta.label}
             </span>
             {seguimiento?.ultimo_checkin_at && (
-              <span className="text-slate-400 text-xs">
+              <span className="text-slate-500 text-xs">
                 Último registro: {new Date(seguimiento.ultimo_checkin_at).toLocaleString('es-CL')}
               </span>
             )}
           </div>
-          <p className="text-slate-700 text-sm leading-relaxed max-w-3xl">
+          <p className="text-slate-800 text-sm leading-relaxed max-w-3xl">
             {seguimiento?.mensaje_protocolo || 'Aún no hay registros completos hoy.'}
           </p>
         </div>
@@ -159,6 +185,18 @@ export default function PatientTratamientoActivo() {
         </button>
       </div>
 
+      {/* Mensaje de logro hidratación (SOLO sin restricción hídrica) */}
+      {alcanzoMetaSegura && (
+        <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-emerald-900 text-xs font-bold uppercase">Meta diaria alcanzada</span>
+            <p className="text-emerald-800 text-sm">
+              ¡Buen trabajo! Registraste {formatearHidratacion(mlActual)}, cumpliendo tu meta individual de {metaMl} mL/día.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Alerta Metabólica Paralela */}
       {seguimiento?.alerta_metabolica && seguimiento.alerta_metabolica !== 'NINGUNA' && (
         <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl flex flex-col gap-1">
@@ -167,20 +205,20 @@ export default function PatientTratamientoActivo() {
         </div>
       )}
 
-      {/* Formulario Real de Check-in Diario */}
+      {/* Formulario Real de Check-in Diario (0 valores predeterminados, 0 instrucciones en placeholder) */}
       {showForm && (
         <form onSubmit={handleSubmitCheckin} className="p-6 bg-white rounded-2xl border border-teal-200 shadow-sm flex flex-col gap-5">
           <div>
             <h2 className="text-slate-900 text-lg font-bold">Nuevo chequeo diario</h2>
-            <p className="text-slate-500 text-xs mt-0.5">
-              Completa con tus mediciones reales de hoy. No hay valores predeterminados.
+            <p className="text-slate-600 text-xs mt-0.5">
+              Completa con tus mediciones reales de hoy. Las indicaciones permanecen siempre visibles sobre cada recuadro.
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="flex flex-col gap-1">
               <label className="text-slate-900 text-xs font-semibold">Temperatura (°C)</label>
-              <span className="text-slate-500 text-[11px]">Ej. 36.8 o 38.2</span>
+              <span className="text-slate-500 text-xs">Medida con termómetro (en °C, con punto decimal).</span>
               <input
                 type="number"
                 step="0.1"
@@ -193,8 +231,8 @@ export default function PatientTratamientoActivo() {
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="text-slate-900 text-xs font-semibold">Dolor (0 a 10)</label>
-              <span className="text-slate-500 text-[11px]">0 = sin dolor · 10 = dolor máximo</span>
+              <label className="text-slate-900 text-xs font-semibold">Intensidad del dolor (0 a 10)</label>
+              <span className="text-slate-500 text-xs">0 = sin dolor · 10 = dolor máximo.</span>
               <input
                 type="number"
                 min="0"
@@ -207,7 +245,7 @@ export default function PatientTratamientoActivo() {
 
             <div className="flex flex-col gap-1">
               <label className="text-slate-900 text-xs font-semibold">Líquidos ingeridos hoy (mL)</label>
-              <span className="text-slate-500 text-[11px]">Convención: 1 vaso = 250 mL</span>
+              <span className="text-slate-500 text-xs">Convención: 1 vaso de referencia = 250 mL.</span>
               <div className="flex gap-1.5">
                 <input
                   type="number"
@@ -234,7 +272,7 @@ export default function PatientTratamientoActivo() {
               <label className="text-slate-900 text-xs font-semibold">
                 Glucosa capilar (mg/dL) {esDiabetico ? '' : '(opcional)'}
               </label>
-              <span className="text-slate-500 text-[11px]">Solo si cuentas con medición capilar</span>
+              <span className="text-slate-500 text-xs">Ingresa el valor si cuentas con medición capilar hoy.</span>
               <input
                 type="number"
                 min="20"
@@ -243,6 +281,39 @@ export default function PatientTratamientoActivo() {
                 onChange={(e) => setCheckinForm({ ...checkinForm, glucosaCapilar: e.target.value })}
                 className="px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm"
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1">
+              <label className="text-slate-900 text-xs font-semibold">Localización del dolor (si tienes)</label>
+              <span className="text-slate-500 text-xs">Indica dónde se concentra principalmente la molestia.</span>
+              <select
+                value={checkinForm.dolorLocalizacion}
+                onChange={(e) => setCheckinForm({ ...checkinForm, dolorLocalizacion: e.target.value })}
+                className="px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm"
+              >
+                <option value="">Selecciona una opción...</option>
+                <option value="Sin dolor">Sin dolor</option>
+                <option value="Zona pélvica / vejiga">Zona pélvica / bajo vientre</option>
+                <option value="Costado o espalda baja (flanco/lumbar)">Costado o espalda baja (flanco / lumbar)</option>
+                <option value="Dolor tipo cólico intenso">Dolor tipo cólico</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-slate-900 text-xs font-semibold">Evolución comparada con ayer</label>
+              <span className="text-slate-500 text-xs">Indica cómo han cambiado tus síntomas respecto al día previo.</span>
+              <select
+                value={checkinForm.dolorEvolucion}
+                onChange={(e) => setCheckinForm({ ...checkinForm, dolorEvolucion: e.target.value })}
+                className="px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm"
+              >
+                <option value="">Selecciona una opción...</option>
+                <option value="Mejorando">Mejorando</option>
+                <option value="Igual">Sin cambios</option>
+                <option value="Empeorando">Empeorando / dolor nuevo</option>
+              </select>
             </div>
           </div>
 
@@ -272,7 +343,7 @@ export default function PatientTratamientoActivo() {
             </div>
           </div>
 
-          {/* Síntomas adicionales */}
+          {/* Signos de alarma adicionales */}
           <div className="flex flex-col gap-2">
             <span className="text-slate-900 text-xs font-semibold">Marca solo si presentas hoy alguno de estos signos:</span>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
@@ -281,6 +352,7 @@ export default function PatientTratamientoActivo() {
                 ['dolorFlanco', 'Dolor nuevo o creciente en costado / espalda baja'],
                 ['escalofriosTemblor', 'Escalofríos intensos con temblor'],
                 ['vomitosPersistentes', 'Vómitos persistentes que impiden hidratarme o medicarme'],
+                ['disminucionOrina', 'Disminución importante de la cantidad de orina'],
                 ['sangreOrina', 'Sangre visible en la orina'],
                 ['coagulosRetencion', 'Coágulos con dificultad para orinar'],
                 ['confusionODeterioro', 'Confusión nueva, desmayo o dificultad respiratoria'],
@@ -298,15 +370,28 @@ export default function PatientTratamientoActivo() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-slate-900 text-xs font-semibold">Comentario adicional (opcional)</label>
-            <span className="text-slate-500 text-[11px]">Registra efectos adversos o cómo ha evolucionado el dolor.</span>
-            <input
-              type="text"
-              value={checkinForm.comentario}
-              onChange={(e) => setCheckinForm({ ...checkinForm, comentario: e.target.value })}
-              className="px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1">
+              <label className="text-slate-900 text-xs font-semibold">Efectos adversos (opcional)</label>
+              <span className="text-slate-500 text-xs">Registra náuseas, molestias gástricas, erupciones o barreras para tomar tu dosis.</span>
+              <input
+                type="text"
+                value={checkinForm.efectosAdversos}
+                onChange={(e) => setCheckinForm({ ...checkinForm, efectosAdversos: e.target.value })}
+                className="px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-slate-900 text-xs font-semibold">Comentario adicional (opcional)</label>
+              <span className="text-slate-500 text-xs">Anota cualquier detalle relevante para tu profesional.</span>
+              <input
+                type="text"
+                value={checkinForm.comentario}
+                onChange={(e) => setCheckinForm({ ...checkinForm, comentario: e.target.value })}
+                className="px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm"
+              />
+            </div>
           </div>
 
           <div className="flex justify-end gap-3">
@@ -331,7 +416,7 @@ export default function PatientTratamientoActivo() {
       {/* Grid Principal */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
         <div className="xl:col-span-2 flex flex-col gap-6">
-          {/* Esquema actual */}
+          {/* Plan indicado + límites nutricionales individuales */}
           <section className="p-6 bg-white rounded-2xl border border-slate-200 flex flex-col gap-4">
             <div className="flex justify-between items-end">
               <div>
@@ -358,7 +443,7 @@ export default function PatientTratamientoActivo() {
                 <span className="text-slate-500 text-[10px] font-bold uppercase">Tratamiento registrado</span>
                 <p className="text-slate-900 text-sm font-bold">{seguimiento?.antibiotico_actual || 'Sin tratamiento activo registrado'}</p>
                 <p className="text-slate-600 text-xs mt-0.5">
-                  {seguimiento?.esquema_indicacion || 'No suspendas ni cambies tu antibiótico sin indicación profesional.'}
+                  No suspendas ni reutilices antibióticos sobrantes; ante cualquier duda consulta con tu equipo.
                 </p>
               </div>
               <a
@@ -368,21 +453,39 @@ export default function PatientTratamientoActivo() {
                 Consultar al equipo
               </a>
             </div>
+
+            {tieneLimitesNut && (
+              <div className="p-4 bg-teal-50 rounded-xl border border-teal-200 flex flex-col gap-1.5">
+                <span className="text-teal-900 text-xs font-bold uppercase">
+                  Metas o límites nutricionales indicados por tu equipo
+                </span>
+                <div className="flex flex-wrap gap-3 text-xs text-teal-950">
+                  {limitesNut.sodio && <span><strong>Sodio:</strong> {limitesNut.sodio}</span>}
+                  {limitesNut.proteinas && <span><strong>Proteínas:</strong> {limitesNut.proteinas}</span>}
+                  {limitesNut.carbohidratos && <span><strong>Carbohidratos:</strong> {limitesNut.carbohidratos}</span>}
+                </div>
+                {limitesNut.indicacion && <p className="text-xs text-teal-800">{limitesNut.indicacion}</p>}
+              </div>
+            )}
           </section>
 
           {/* Tendencias de hidratación y síntomas (Descriptivo, NO causal) */}
           <section className="p-6 bg-white rounded-2xl border border-slate-200 flex flex-col gap-4">
             <div>
               <h3 className="text-slate-900 text-lg font-bold">Tendencias de hidratación y síntomas</h3>
-              <p className="text-slate-500 text-xs mt-0.5">
-                Registro descriptivo por fecha y hora. La hidratación apoya el cuidado, pero no sustituye el tratamiento ni la valoración médica.
+              <p className="text-slate-600 text-xs mt-0.5">
+                Registro descriptivo con fecha y hora (en mL y L). La hidratación apoya el cuidado según tu plan individual, pero no sustituye el tratamiento ni la valoración médica.
               </p>
             </div>
 
-            {usuario?.restriccionHidrica && (
+            {usuario?.restriccionHidrica ? (
               <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-800 text-xs font-semibold">
-                Restricción hídrica activa: {usuario.metaHidricaNota || 'No aumentes tu consumo de líquidos sin indicación médica.'}
+                Restricción hídrica activa (límite máximo {metaMl} mL/día): {usuario.metaHidricaNota || 'No modifiques tu límite de líquidos sin indicación médica.'}
               </div>
+            ) : (
+              <p className="text-xs text-slate-600">
+                Meta diaria individual: <strong>{formatearHidratacion(metaMl)}</strong> (salvo indicación distinta de tu equipo).
+              </p>
             )}
 
             {checkins.length > 0 ? (
@@ -393,7 +496,7 @@ export default function PatientTratamientoActivo() {
                       <th className="py-2 pr-3">Fecha / hora</th>
                       <th className="py-2 pr-3">Temp.</th>
                       <th className="py-2 pr-3">Dolor</th>
-                      <th className="py-2 pr-3">Hidratación</th>
+                      <th className="py-2 pr-3">Líquidos (mL / L)</th>
                       <th className="py-2 pr-3">Glucosa</th>
                       <th className="py-2">Estado</th>
                     </tr>
@@ -442,24 +545,22 @@ export default function PatientTratamientoActivo() {
 
         {/* Columna Derecha */}
         <div className="xl:col-span-1 flex flex-col gap-6">
-          {/* Señales de Alarma diferenciadas (Urgencias vs Mismo Día) */}
           <section className="p-6 bg-red-50 rounded-2xl border border-red-200 flex flex-col gap-3">
             <h3 className="text-red-800 text-base font-bold">Señales de alarma</h3>
             <div className="bg-white p-3 rounded-xl border border-red-200 flex flex-col gap-1">
               <span className="text-red-700 text-xs font-bold uppercase">Urgencias inmediatas</span>
               <p className="text-slate-700 text-xs leading-relaxed">
-                Confusión nueva, desmayo, dificultad respiratoria o deterioro rápido: acude a urgencias o llama a emergencias sin esperar a que aparezcan todos los signos.
+                Confusión o somnolencia nueva, desmayo, dificultad respiratoria, coágulos con retención urinaria o deterioro rápido: acude a urgencias o llama a emergencias sin esperar a que aparezcan todos los signos.
               </p>
             </div>
             <div className="bg-white p-3 rounded-xl border border-amber-200 flex flex-col gap-1">
-              <span className="text-amber-800 text-xs font-bold uppercase">Valoración presencial el mismo día</span>
+              <span className="text-amber-800 text-xs font-bold uppercase">Valoración presencial hoy</span>
               <p className="text-slate-700 text-xs leading-relaxed">
-                Fiebre ≥ 38 °C, escalofríos con temblor, dolor nuevo o creciente en costado/espalda baja, vómitos que impidan hidratarse o tomar el tratamiento, embarazo con síntomas o falta de mejoría en 48–72 horas.
+                Fiebre ≥ 38 °C, escalofríos intensos con temblor, dolor nuevo o creciente en costado/espalda baja, vómitos que impidan hidratarse o tomar el tratamiento, embarazo con síntomas o falta de mejoría en 48–72 horas.
               </p>
             </div>
           </section>
 
-          {/* Exámenes del paciente */}
           <section className="p-6 bg-white rounded-2xl border border-slate-200 flex flex-col gap-4">
             <div className="flex justify-between items-center">
               <h3 className="text-slate-900 text-base font-bold">Tus exámenes</h3>
@@ -472,7 +573,7 @@ export default function PatientTratamientoActivo() {
                 examenes.slice(0, 4).map((ex) => (
                   <div key={ex.id} className="pb-3 border-b border-slate-100 last:border-0 last:pb-0 flex flex-col gap-1">
                     <span className="text-slate-900 text-sm font-semibold truncate">{ex.nombre_archivo || ex.tipo_examen}</span>
-                    <span className="text-slate-500 text-[11px]">{ex.estado}</span>
+                    <span className="text-slate-500 text-xs">{ex.estado}</span>
                   </div>
                 ))
               ) : (

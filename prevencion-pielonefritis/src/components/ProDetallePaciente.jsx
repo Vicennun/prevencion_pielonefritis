@@ -125,7 +125,7 @@ export default function ProDetallePaciente({ pacienteId }) {
             Detalle: {errorMsg}
           </p>
         )}
-        <a href="#profesional/pacientes" className="px-4 py-2 bg-red-700 text-white rounded-lg text-xs font-semibold">
+        <a href="#profesional/pacientes" className="px-4 py-2 bg-blue-700 text-white rounded-lg text-xs font-semibold">
           Volver a la lista
         </a>
       </main>
@@ -152,7 +152,7 @@ export default function ProDetallePaciente({ pacienteId }) {
       {/* Header */}
       <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4 shrink-0">
         <div className="flex flex-col gap-1">
-          <h1 className="text-red-700 text-3xl font-bold font-['Inter']">Ficha clínica del paciente</h1>
+          <h1 className="text-blue-800 text-3xl font-bold font-['Inter']">Ficha clínica del paciente</h1>
           <p className="text-slate-500 text-sm">
             {nombreSeguro} · ID PAC-{String(paciente.id).padStart(4, '0')}
           </p>
@@ -173,7 +173,7 @@ export default function ProDetallePaciente({ pacienteId }) {
           </a>
           <button
             onClick={() => setShowNewAtencion(true)}
-            className="px-4 py-2.5 bg-red-700 hover:bg-red-800 rounded-[10px] text-white text-sm font-semibold cursor-pointer"
+            className="px-4 py-2.5 bg-blue-700 hover:bg-blue-800 rounded-[10px] text-white text-sm font-semibold cursor-pointer"
           >
             + Nueva atención
           </button>
@@ -184,7 +184,7 @@ export default function ProDetallePaciente({ pacienteId }) {
       <div className="p-6 bg-white rounded-2xl border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-red-100 rounded-full flex justify-center items-center shrink-0">
-            <span className="text-red-700 text-base font-bold">{initials}</span>
+            <span className="text-blue-800 text-base font-bold">{initials}</span>
           </div>
           <div className="flex flex-col gap-0.5">
             <h2 className="text-slate-900 text-xl font-bold">{nombreSeguro}</h2>
@@ -454,7 +454,7 @@ export default function ProDetallePaciente({ pacienteId }) {
               <button
                 type="submit"
                 disabled={saving || !nuevaAt.avisoPaciente}
-                className="px-5 py-2 bg-red-700 hover:bg-red-800 disabled:opacity-50 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                className="px-5 py-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white rounded-lg text-xs font-semibold cursor-pointer"
               >
                 {saving ? 'Guardando...' : 'Guardar atención'}
               </button>

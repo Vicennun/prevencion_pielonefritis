@@ -19,6 +19,7 @@ export function mapUsuario(u) {
     metaHidricaNota: u.meta_hidrica_nota,
     itu6Meses: u.itu_6_meses,
     itu12Meses: u.itu_12_meses,
+    episodiosUrinarios: Array.isArray(u.episodios_urinarios) ? u.episodios_urinarios : [],
   };
 }
 
@@ -36,6 +37,71 @@ function sanitizarNombreArchivo(nombre) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+async function dispararDerivacionAutomatica(paciente, resultado, origen = 'Chequeo diario') {
+  const requiereDerivacion =
+    resultado.nivelSemaforo === 'URGENCIA_INMEDIATA' ||
+    resultado.nivelSemaforo === 'ROJO' ||
+    resultado.alertaMetabolica === 'URGENCIA_METABOLICA';
+
+  if (!requiereDerivacion) return false;
+
+  const esUrgencia =
+    resultado.nivelSemaforo === 'URGENCIA_INMEDIATA' ||
+    resultado.alertaMetabolica === 'URGENCIA_METABOLICA';
+
+  const etiqueta = esUrgencia ? 'URGENCIA INMEDIATA' : 'VALORACIÓN HOY (ROJO)';
+  const resumenMotivos = (resultado.triggersActivos || []).join(' · ') || 'Criterios clínicos activos';
+
+  const { data: pro } = await supabase
+    .from('usuarios')
+    .select('id')
+    .eq('rol', 'PROFESIONAL')
+    .order('id', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const proId = pro?.id || 1;
+
+  // 1) Alerta para el Centro de Comando del Profesional
+  // 2) Recordatorio de confirmación visible para el Paciente
+  // 3) Mensaje automático al inbox del Profesional
+  await Promise.allSettled([
+    supabase.from('recordatorios').insert({
+      paciente_id: paciente.id,
+      profesional_id: proId,
+      tipo: 'alerta',
+      titulo: `Derivación automática (${etiqueta}): ${paciente.nombreCompleto || paciente.nombre_completo}`,
+      descripcion: `Origen: ${origen}. Motivos: ${resumenMotivos}.`,
+      frecuencia: 'Alarma',
+      prioridad: 'Alta',
+      fecha_programada: 'Ahora',
+      activo: true,
+    }),
+    supabase.from('recordatorios').insert({
+      paciente_id: paciente.id,
+      profesional_id: proId,
+      tipo: 'cuidado',
+      titulo: esUrgencia
+        ? 'Derivación urgente activada: acudir a urgencias'
+        : 'Derivación médica activada: valoración hoy',
+      descripcion:
+        'Tu equipo profesional ya recibió esta alerta prioritaria. Sigue las indicaciones de seguridad y no suspendas tu tratamiento sin evaluación.',
+      frecuencia: 'Alarma',
+      prioridad: 'Alta',
+      fecha_programada: 'Hoy',
+      activo: true,
+    }),
+    supabase.from('mensajes').insert({
+      remitente_id: paciente.id,
+      destinatario_id: proId,
+      contenido: `[DERIVACIÓN AUTOMÁTICA · ${etiqueta}] ${origen}: ${resumenMotivos}.`,
+      leido: false,
+    }),
+  ]);
+
+  return true;
 }
 
 export const api = {
@@ -131,15 +197,22 @@ export const api = {
   // ==========================================
   async crearEvaluacion(pacienteId, form) {
     const paciente = await this.getUsuario(pacienteId);
-    const esRecurrente = Number(form.ituConfirmadas6m || 0) >= 2 || Number(form.ituConfirmadas12m || 0) >= 3;
+    const itu6m = Number(form.ituConfirmadas6m || 0);
+    const itu12m = Number(form.ituConfirmadas12m || 0);
+    const esRecurrente = itu6m >= 2 || itu12m >= 3;
 
     const resultado = evaluarSemaforoClinico(
       {
+        requiereContextoItu: true,
+        enSeguimientoItu: Boolean(form.enTratamientoItu),
+        ituConfirmadas6m: itu6m,
+        ituConfirmadas12m: itu12m,
         temperatura: form.temperatura,
         dolorLumbar: form.dolorIntensidad,
         dolorFlanco: form.dolorFlancoLumbar,
         escalofriosTemblor: form.escalofriosTemblor,
         vomitosPersistentes: form.vomitosPersistentes,
+        disminucionOrina: form.disminucionOrina,
         sintomasUrinarios: form.sintomasUrinariosBajos,
         sangreOrina: form.sangreOrina,
         coagulosRetencion: form.coagulosRetencion,
@@ -148,14 +221,17 @@ export const api = {
         obstruccionSospechada: form.obstruccionSospechada,
         embarazo: form.embarazo,
         diabetes: form.diabetes,
+        enfermedadRenal: form.enfermedadRenal,
         inmunosupresion: form.inmunosupresion,
+        sondaUrinaria: form.sondaUrinaria,
         instrumentacionReciente: form.instrumentacionReciente,
+        efectosAdversos: Boolean(form.efectosAdversos?.trim()),
         esRecurrente,
       },
       paciente
     );
 
-    // Actualizar antecedentes en texto completo en el perfil del paciente
+    // Actualizar antecedentes en texto completo en el perfil del paciente (sin abreviaciones)
     const antecedentes = [];
     if (form.diabetes) antecedentes.push('Diabetes mellitus');
     if (form.enfermedadRenal) antecedentes.push('Enfermedad renal crónica');
@@ -164,22 +240,35 @@ export const api = {
     if (form.inmunosupresion) antecedentes.push('Inmunosupresión o trasplante');
     if (form.sondaUrinaria) antecedentes.push('Sonda urinaria');
     if (form.instrumentacionReciente) antecedentes.push('Instrumentación o cirugía urinaria reciente');
+    if (form.problemasProstaticos) antecedentes.push('Antecedente de problemas prostáticos');
+    if (form.hipertension) antecedentes.push('Hipertensión arterial');
+    if (form.obesidad) antecedentes.push('Obesidad');
     if (form.embarazo) {
       antecedentes.push(form.semanasGestacion ? `Embarazo (${form.semanasGestacion} semanas)` : 'Embarazo o posible embarazo');
     }
     if (esRecurrente) antecedentes.push('Infecciones urinarias recurrentes');
 
+    const episodiosPrevios = Array.isArray(paciente.episodios_urinarios) ? paciente.episodios_urinarios : [];
+    const episodiosNuevos = Array.isArray(form.episodiosUrinarios) ? form.episodiosUrinarios : [];
+    const episodiosCombinados = [...episodiosPrevios, ...episodiosNuevos];
+
     await supabase
       .from('usuarios')
       .update({
+        sexo: form.sexo || paciente.sexo,
+        nacionalidad: form.nacionalidad || paciente.nacionalidad,
+        problemas_prostaticos: Boolean(form.problemasProstaticos),
+        dialisis: Boolean(form.dialisis),
+        creatinina_egfr: form.enfermedadRenalDetalle || paciente.creatinina_egfr,
         antecedentes: antecedentes.length ? antecedentes : ['Sin antecedentes de riesgo'],
+        episodios_urinarios: episodiosCombinados,
         embarazo: Boolean(form.embarazo),
         semanas_gestacion: form.semanasGestacion ? Number(form.semanasGestacion) : null,
         restriccion_hidrica: Boolean(form.restriccionHidrica),
         alergias: form.alergias || paciente.alergias,
         medicamentos_actuales: form.medicamentosActuales || paciente.medicamentos_actuales,
-        itu_6_meses: Number(form.ituConfirmadas6m || 0),
-        itu_12_meses: Number(form.ituConfirmadas12m || 0),
+        itu_6_meses: itu6m,
+        itu_12_meses: itu12m,
       })
       .eq('id', pacienteId);
 
@@ -187,18 +276,25 @@ export const api = {
       .from('evaluaciones_riesgo')
       .insert({
         paciente_id: pacienteId,
+        nacionalidad: form.nacionalidad || null,
         embarazo: Boolean(form.embarazo),
         semanas_gestacion: form.semanasGestacion ? Number(form.semanasGestacion) : null,
         diabetes: Boolean(form.diabetes),
         enfermedad_renal: Boolean(form.enfermedadRenal),
         enfermedad_renal_detalle: form.enfermedadRenalDetalle || null,
+        dialisis: Boolean(form.dialisis),
+        problemas_prostaticos: Boolean(form.problemasProstaticos),
         litiasis_antecedente: Boolean(form.litiasisAntecedente),
         obstruccion_sospechada: Boolean(form.obstruccionSospechada),
         inmunosupresion: Boolean(form.inmunosupresion),
         sonda_urinaria: Boolean(form.sondaUrinaria),
         instrumentacion_reciente: Boolean(form.instrumentacionReciente),
-        itu_confirmadas_6m: Number(form.ituConfirmadas6m || 0),
-        itu_confirmadas_12m: Number(form.ituConfirmadas12m || 0),
+        hospitalizacion_reciente: Boolean(form.hospitalizacionReciente),
+        hospitalizacion_detalle: form.hospitalizacionDetalle || null,
+        en_tratamiento_itu: Boolean(form.enTratamientoItu),
+        episodios_urinarios: episodiosNuevos,
+        itu_confirmadas_6m: itu6m,
+        itu_confirmadas_12m: itu12m,
         es_recurrente: esRecurrente,
         restriccion_hidrica: Boolean(form.restriccionHidrica),
         fiebre_mayor_38: Number(form.temperatura || 0) >= 38,
@@ -206,6 +302,7 @@ export const api = {
         dolor_flanco_lumbar: Boolean(form.dolorFlancoLumbar),
         dolor_intensidad: form.dolorIntensidad !== '' ? Number(form.dolorIntensidad) : 0,
         vomitos_persistentes: Boolean(form.vomitosPersistentes),
+        disminucion_orina: Boolean(form.disminucionOrina),
         sintomas_urinarios_bajos: Boolean(form.sintomasUrinariosBajos),
         sangre_orina: Boolean(form.sangreOrina),
         coagulos_retencion: Boolean(form.coagulosRetencion),
@@ -213,6 +310,14 @@ export const api = {
         desmayo_o_disnea: Boolean(form.desmayoODisnea),
         alergias: form.alergias || null,
         medicamentos_actuales: form.medicamentosActuales || null,
+        antibiotico_detalle: form.antibioticoDetalle || null,
+        efectos_adversos: form.efectosAdversos || null,
+        habitos_preventivos: {
+          miccion_postcoital: form.miccionPostcoital || null,
+          uso_espermicidas: form.usoEspermicidas || null,
+          consumo_arandano: form.consumoArandano || null,
+        },
+        consentimiento_explicito: Boolean(form.consentimientoNoDiagnostico),
         observaciones: form.observaciones || null,
         nivel_prioridad: resultado.nivelSemaforo,
         motivos_prioridad: resultado.triggersActivos,
@@ -223,7 +328,8 @@ export const api = {
       .single();
 
     if (error) throw new Error(error.message);
-    return { evaluacion: data, resultado };
+    const derivacionActivada = await dispararDerivacionAutomatica(paciente, resultado, 'Evaluación clínica');
+    return { evaluacion: data, resultado, derivacionActivada };
   },
 
   async getEvaluacionesPaciente(pacienteId) {
@@ -302,21 +408,25 @@ export const api = {
           : null;
 
     const vasosHidratacion = mlHidratacion !== null ? Math.round(mlHidratacion / 250) : null;
+    const dosisOmitidas =
+      metricas.tomoTratamiento === false ? (seg.dosis_omitidas || 0) + 1 : seg.dosis_omitidas || 0;
 
     const evalRes = evaluarSemaforoClinico(
       {
         temperatura: metricas.temperatura,
         dolorLumbar: metricas.dolorLumbar,
-        dolorFlanco: metricas.dolorFlanco,
+        dolorFlanco: metricas.dolorFlanco || metricas.dolorLocalizacion?.includes('flanco'),
         escalofriosTemblor: metricas.escalofriosTemblor,
         vomitosPersistentes: metricas.vomitosPersistentes,
+        disminucionOrina: metricas.disminucionOrina,
         toleraLiquidosMedicamentos: metricas.toleraLiquidosMedicamentos,
         sintomasUrinarios: metricas.sintomasUrinarios,
         sangreOrina: metricas.sangreOrina,
         coagulosRetencion: metricas.coagulosRetencion,
         confusionODeterioro: metricas.confusionODeterioro,
         glucosaCapilar: metricas.glucosaCapilar,
-        dosisOmitidas: metricas.tomoTratamiento === false ? (seg.dosis_omitidas || 0) + 1 : seg.dosis_omitidas || 0,
+        dosisOmitidas,
+        efectosAdversos: Boolean(metricas.efectosAdversos?.trim()),
         horasSinMejoria: seg.horas_sin_mejoria || 0,
       },
       paciente
@@ -329,14 +439,18 @@ export const api = {
       dia_tratamiento: seg.dia_actual || 1,
       temperatura: metricas.temperatura !== '' && metricas.temperatura !== undefined ? Number(metricas.temperatura) : null,
       dolor_lumbar: metricas.dolorLumbar !== '' && metricas.dolorLumbar !== undefined ? Number(metricas.dolorLumbar) : null,
+      dolor_localizacion: metricas.dolorLocalizacion || null,
+      dolor_evolucion: metricas.dolorEvolucion || null,
       ml_hidratacion: mlHidratacion,
       vasos_hidratacion: vasosHidratacion,
       vomitos_persistentes: Boolean(metricas.vomitosPersistentes),
+      disminucion_orina: Boolean(metricas.disminucionOrina),
       escalofrios_temblor: Boolean(metricas.escalofriosTemblor),
       confusion_o_deterioro: Boolean(metricas.confusionODeterioro),
       sangre_orina: Boolean(metricas.sangreOrina),
       tomo_tratamiento: metricas.tomoTratamiento !== false,
       glucosa_capilar: metricas.glucosaCapilar ? Number(metricas.glucosaCapilar) : null,
+      efectos_adversos: metricas.efectosAdversos || null,
       nivel_semaforo_resultante: evalRes.nivelSemaforo,
       comentario_clinico: metricas.comentario || evalRes.tituloSemaforo,
     });
@@ -356,8 +470,11 @@ export const api = {
         mensaje_reevaluacion_imagen: evalRes.mensajeReevaluacionImagen,
         temperatura_actual: metricas.temperatura !== '' && metricas.temperatura !== undefined ? Number(metricas.temperatura) : null,
         dolor_lumbar_actual: metricas.dolorLumbar !== '' && metricas.dolorLumbar !== undefined ? Number(metricas.dolorLumbar) : null,
+        dolor_localizacion: metricas.dolorLocalizacion || seg.dolor_localizacion,
+        dolor_evolucion: metricas.dolorEvolucion || seg.dolor_evolucion,
         escalofrios_temblor: Boolean(metricas.escalofriosTemblor),
         vomitos_persistentes: Boolean(metricas.vomitosPersistentes),
+        disminucion_orina: Boolean(metricas.disminucionOrina),
         tolera_liquidos_medicamentos: metricas.toleraLiquidosMedicamentos !== false,
         sintomas_urinarios_activos: Boolean(metricas.sintomasUrinarios),
         sangre_orina: Boolean(metricas.sangreOrina),
@@ -365,7 +482,8 @@ export const api = {
         glucosa_capilar_actual: metricas.glucosaCapilar ? Number(metricas.glucosaCapilar) : null,
         ml_hidratacion: mlHidratacion,
         vasos_hidratacion: vasosHidratacion,
-        dosis_omitidas: metricas.tomoTratamiento === false ? (seg.dosis_omitidas || 0) + 1 : seg.dosis_omitidas || 0,
+        dosis_omitidas: dosisOmitidas,
+        efectos_adversos: metricas.efectosAdversos || null,
         ultimo_checkin_at: new Date().toISOString(),
       })
       .eq('id', seg.id)
@@ -373,7 +491,9 @@ export const api = {
       .single();
 
     if (errUpd) throw new Error(errUpd.message);
-    return { ...actualizado, paciente: mapUsuario(actualizado.paciente) };
+    const pacienteMap = mapUsuario(actualizado.paciente);
+    const derivacionActivada = await dispararDerivacionAutomatica(pacienteMap, evalRes, 'Check-in diario');
+    return { ...actualizado, paciente: pacienteMap, derivacionActivada };
   },
 
   async actualizarSeguimiento(seguimientoId, campos) {

@@ -10,10 +10,18 @@ export default function ProSeguimientoActivo({ pacienteInicialId }) {
   const [loading, setLoading] = useState(true);
   const [actionMsg, setActionMsg] = useState('');
 
-  // Modal de meta / restricción hídrica
-  const [showAguaModal, setShowAguaModal] = useState(false);
-  const [savingAgua, setSavingAgua] = useState(false);
-  const [aguaForm, setAguaForm] = useState({ restriccion: false, metaMl: 1750, nota: '' });
+  // Modal de hidratación y techos nutricionales individualizados
+  const [showLimitesModal, setShowLimitesModal] = useState(false);
+  const [savingLimites, setSavingLimites] = useState(false);
+  const [limitesForm, setLimitesForm] = useState({
+    restriccion: false,
+    metaMl: '',
+    notaHidrica: '',
+    sodio: '',
+    proteinas: '',
+    carbohidratos: '',
+    indicacion: '',
+  });
 
   const cargarSeguimientos = async () => {
     try {
@@ -58,33 +66,46 @@ export default function ProSeguimientoActivo({ pacienteInicialId }) {
     cargarDetalles();
   }, [currentSeg?.id]);
 
-  const abrirModalAgua = () => {
+  const abrirModalLimites = () => {
     if (!currentSeg?.paciente) return;
-    setAguaForm({
+    const lim = currentSeg.paciente.limites_nutricionales || {};
+    setLimitesForm({
       restriccion: Boolean(currentSeg.paciente.restriccionHidrica),
-      metaMl: currentSeg.paciente.metaHidricaMl || 1750,
-      nota: currentSeg.paciente.metaHidricaNota || '',
+      metaMl: currentSeg.paciente.metaHidricaMl ? String(currentSeg.paciente.metaHidricaMl) : '',
+      notaHidrica: currentSeg.paciente.metaHidricaNota || '',
+      sodio: lim.sodio || '',
+      proteinas: lim.proteinas || '',
+      carbohidratos: lim.carbohidratos || '',
+      indicacion: lim.indicacion || '',
     });
-    setShowAguaModal(true);
+    setShowLimitesModal(true);
   };
 
-  const handleGuardarAgua = async (e) => {
+  const handleGuardarLimites = async (e) => {
     e.preventDefault();
     if (!currentSeg?.paciente) return;
-    setSavingAgua(true);
+    setSavingLimites(true);
     try {
       await api.actualizarUsuario(currentSeg.paciente_id, {
-        restriccion_hidrica: Boolean(aguaForm.restriccion),
-        meta_hidrica_ml: Number(aguaForm.metaMl) || 1750,
-        meta_hidrica_nota: aguaForm.nota.trim() || 'Meta individual definida por el equipo tratante.',
+        restriccion_hidrica: Boolean(limitesForm.restriccion),
+        meta_hidrica_ml: limitesForm.metaMl ? Number(limitesForm.metaMl) : null,
+        meta_hidrica_nota:
+          limitesForm.notaHidrica.trim() || 'Meta o límite individual definido por el equipo tratante.',
+        limites_nutricionales: {
+          sodio: limitesForm.sodio.trim() || null,
+          proteinas: limitesForm.proteinas.trim() || null,
+          carbohidratos: limitesForm.carbohidratos.trim() || null,
+          indicacion: limitesForm.indicacion.trim() || null,
+          actualizado_en: new Date().toISOString(),
+        },
       });
-      setShowAguaModal(false);
-      setActionMsg('Meta y restricción hídrica actualizadas en la ficha del paciente.');
+      setShowLimitesModal(false);
+      setActionMsg('Metas hídricas y techos nutricionales actualizados en la ficha del paciente.');
       await cargarSeguimientos();
     } catch (err) {
-      alert(`Error al actualizar hidratación: ${err.message}`);
+      alert(`Error al actualizar indicaciones: ${err.message}`);
     } finally {
-      setSavingAgua(false);
+      setSavingLimites(false);
     }
   };
 
@@ -127,10 +148,11 @@ export default function ProSeguimientoActivo({ pacienteInicialId }) {
 
   const meta = PRIORIDAD_META[currentSeg.nivel_semaforo] || PRIORIDAD_META.INFORMACION_INSUFICIENTE;
   const paciente = currentSeg.paciente || {};
+  const limNut = paciente.limites_nutricionales || {};
   const examenPendiente = examenes.find((ex) => ex.estado.startsWith('Resultado disponible')) || examenes[0] || null;
 
   return (
-    <main className="flex-1 bg-neutral-200 min-h-screen p-4 lg:p-8 flex flex-col gap-6 overflow-y-auto">
+    <main className="flex-1 bg-neutral-200 min-h-screen p-4 lg:p-8 flex flex-col gap-6 overflow-y-auto pb-16">
       {/* Selector de Pacientes ordenados por prioridad */}
       <div className="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-wrap items-center gap-2 shrink-0">
         <span className="px-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">
@@ -145,7 +167,7 @@ export default function ProSeguimientoActivo({ pacienteInicialId }) {
               onClick={() => setSelectedPacId(s.paciente_id)}
               className={`px-3 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
                 isSelected
-                  ? 'bg-red-700 text-white shadow-sm'
+                  ? 'bg-blue-700 text-white shadow-sm'
                   : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
               }`}
             >
@@ -162,16 +184,16 @@ export default function ProSeguimientoActivo({ pacienteInicialId }) {
         })}
       </div>
 
-      {/* Header */}
+      {/* Header (Azul clínico) */}
       <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4 shrink-0">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <span className="text-slate-500 text-xs font-semibold uppercase">Monitor de Evaluación Clínica</span>
-            <span className="px-2 py-0.5 bg-slate-800 text-white text-[10px] font-bold rounded uppercase">
+            <span className="px-2 py-0.5 bg-blue-800 text-white text-[10px] font-bold rounded uppercase">
               Reglas deterministas
             </span>
           </div>
-          <h1 className="text-red-700 text-3xl font-bold font-['Inter']">{currentSeg.diagnostico}</h1>
+          <h1 className="text-blue-800 text-3xl font-bold font-['Inter']">{currentSeg.diagnostico}</h1>
           <p className="text-slate-600 text-sm">
             {paciente.nombreCompleto} · PAC-{String(currentSeg.paciente_id).padStart(4, '0')} · {paciente.edad ? `${paciente.edad} años` : ''}
           </p>
@@ -188,7 +210,7 @@ export default function ProSeguimientoActivo({ pacienteInicialId }) {
       </div>
 
       {actionMsg && (
-        <div className="p-3.5 bg-green-50 border border-green-300 rounded-xl text-green-800 text-xs font-semibold">
+        <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-800 text-xs font-semibold">
           {actionMsg}
         </div>
       )}
@@ -271,7 +293,7 @@ export default function ProSeguimientoActivo({ pacienteInicialId }) {
         </div>
       </div>
 
-      {/* Alertas Paralelas (Metabólica + Valoración de Imagen) */}
+      {/* Alertas Paralelas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {currentSeg.alerta_metabolica && currentSeg.alerta_metabolica !== 'NINGUNA' && (
           <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl flex flex-col gap-1">
@@ -299,7 +321,7 @@ export default function ProSeguimientoActivo({ pacienteInicialId }) {
           <span className="text-slate-900 text-2xl font-bold">
             {currentSeg.temperatura_actual != null ? `${currentSeg.temperatura_actual} °C` : 'Sin registro'}
           </span>
-          <span className="text-slate-400 text-[11px]">≥ 38.0 °C = Rojo · 37.5–37.9 °C = Amarillo</span>
+          <span className="text-slate-500 text-[11px]">≥ 38.0 °C = Rojo · 37.5–37.9 °C = Amarillo</span>
         </div>
 
         <div className="p-5 bg-white rounded-2xl border border-slate-200 flex flex-col gap-2 shadow-sm">
@@ -307,13 +329,15 @@ export default function ProSeguimientoActivo({ pacienteInicialId }) {
           <span className="text-slate-900 text-2xl font-bold">
             {currentSeg.dolor_lumbar_actual != null ? `${currentSeg.dolor_lumbar_actual} / 10` : 'Sin registro'}
           </span>
-          <span className="text-slate-400 text-[11px]">{currentSeg.dolor_localizacion || 'Localización no especificada'}</span>
+          <span className="text-slate-500 text-[11px]">
+            {[currentSeg.dolor_localizacion, currentSeg.dolor_evolucion].filter(Boolean).join(' · ') || 'Sin detalle de evolución'}
+          </span>
         </div>
 
         <div className="p-5 bg-white rounded-2xl border border-slate-200 flex flex-col gap-2 shadow-sm">
           <span className="text-slate-500 text-xs font-semibold">Hidratación registrada</span>
-          <span className="text-slate-900 text-base font-bold">{formatearHidratacion(currentSeg.ml_hidratacion)}</span>
-          <span className={`text-[11px] font-semibold ${paciente.restriccionHidrica ? 'text-red-700' : 'text-slate-400'}`}>
+          <span className="text-slate-900 text-sm font-bold">{formatearHidratacion(currentSeg.ml_hidratacion)}</span>
+          <span className={`text-[11px] font-semibold ${paciente.restriccionHidrica ? 'text-red-700' : 'text-slate-500'}`}>
             {paciente.restriccionHidrica
               ? `RESTRICCIÓN: máx. ${paciente.metaHidricaMl || 1200} mL/día`
               : `Meta individual: ${paciente.metaHidricaMl || 1750} mL/día`}
@@ -327,20 +351,20 @@ export default function ProSeguimientoActivo({ pacienteInicialId }) {
               ? `${currentSeg.glucosa_capilar_actual} mg/dL`
               : `${currentSeg.adherencia_porcentaje ?? 100}% adh.`}
           </span>
-          <span className="text-slate-400 text-[11px]">
-            Dosis omitidas reportadas: {currentSeg.dosis_omitidas ?? 0}
+          <span className="text-slate-500 text-[11px]">
+            {currentSeg.disminucion_orina ? 'Diuresis disminuida reportada · ' : ''}
+            Dosis omitidas: {currentSeg.dosis_omitidas ?? 0}
           </span>
         </div>
       </div>
 
       {/* Tendencias + Gestión Manual */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
-        {/* Tendencias descriptivas */}
         <div className="xl:col-span-2 p-6 bg-white rounded-2xl border border-slate-200 flex flex-col gap-4 shadow-sm">
           <div>
             <h3 className="text-slate-900 text-base font-bold">Tendencias de hidratación y síntomas</h3>
             <p className="text-slate-500 text-xs">
-              Historial cronológico de chequeos diarios (registro descriptivo; no establece causalidad automática).
+              Historial cronológico con fecha y hora (registro descriptivo; no establece causalidad automática).
             </p>
           </div>
 
@@ -370,7 +394,7 @@ export default function ProSeguimientoActivo({ pacienteInicialId }) {
                       </td>
                       <td className="py-2.5 pr-3 text-slate-700">{c.dolor_lumbar != null ? `${c.dolor_lumbar}/10` : '—'}</td>
                       <td className="py-2.5 pr-3 text-slate-700">
-                        {c.ml_hidratacion != null ? `${c.ml_hidratacion} mL` : '—'}
+                        {c.ml_hidratacion != null ? formatearHidratacion(c.ml_hidratacion) : '—'}
                       </td>
                       <td className="py-2.5 pr-3 text-slate-700">
                         {c.glucosa_capilar != null ? `${c.glucosa_capilar} mg/dL` : '—'}
@@ -384,27 +408,36 @@ export default function ProSeguimientoActivo({ pacienteInicialId }) {
           )}
         </div>
 
-        {/* Gestión Manual */}
+        {/* Gestión Manual (Azul clínico) */}
         <div className="xl:col-span-1 p-6 bg-zinc-100 rounded-2xl border border-zinc-300 flex flex-col gap-4 shadow-sm">
-          <h3 className="text-red-700 text-base font-bold">Gestión Manual</h3>
+          <h3 className="text-blue-800 text-base font-bold">Gestión Manual</h3>
           <p className="text-slate-600 text-xs">
-            Documenta decisiones clínicas y revisa exámenes del paciente seleccionado.
+            Documenta decisiones clínicas, revisa cultivos e individualiza límites hídricos o nutricionales.
           </p>
+
+          {(limNut.sodio || limNut.proteinas || limNut.carbohidratos) && (
+            <div className="p-3 bg-white rounded-xl border border-blue-200 text-xs text-slate-700 flex flex-col gap-1">
+              <span className="text-blue-800 font-bold text-[11px] uppercase">Techos nutricionales activos</span>
+              {limNut.sodio && <span>Sodio: <strong>{limNut.sodio}</strong></span>}
+              {limNut.proteinas && <span>Proteínas: <strong>{limNut.proteinas}</strong></span>}
+              {limNut.carbohidratos && <span>Carbohidratos: <strong>{limNut.carbohidratos}</strong></span>}
+            </div>
+          )}
 
           <div className="flex flex-col gap-3">
             <a
               href={examenPendiente ? `#profesional/revision-examen/${examenPendiente.id}` : '#profesional/revision-examen'}
-              className="w-full px-4 py-3 bg-red-700 hover:bg-red-800 text-white text-sm font-semibold rounded-xl flex justify-between items-center shadow-sm"
+              className="w-full px-4 py-3 bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold rounded-xl flex justify-between items-center shadow-sm"
             >
               <span>{examenPendiente ? 'Revisar examen del paciente' : 'Ir a revisión de exámenes'}</span>
               <span>›</span>
             </a>
 
             <button
-              onClick={abrirModalAgua}
-              className="w-full px-4 py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-xl flex justify-between items-center cursor-pointer"
+              onClick={abrirModalLimites}
+              className="w-full px-4 py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-sm font-semibold rounded-xl flex justify-between items-center cursor-pointer"
             >
-              <span>Ajustar meta / restricción hídrica</span>
+              <span>Metas hídricas y techos nutricionales</span>
               <span className="text-slate-400">›</span>
             </button>
 
@@ -415,7 +448,7 @@ export default function ProSeguimientoActivo({ pacienteInicialId }) {
                   'Se documentó necesidad de valorar ecografía o tomografía según evolución clínica y factores de riesgo.'
                 )
               }
-              className="w-full px-4 py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-xl flex justify-between items-center cursor-pointer"
+              className="w-full px-4 py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-sm font-semibold rounded-xl flex justify-between items-center cursor-pointer"
             >
               <span>Documentar valoración de imagen</span>
               <span className="text-slate-400">›</span>
@@ -424,65 +457,114 @@ export default function ProSeguimientoActivo({ pacienteInicialId }) {
         </div>
       </div>
 
-      {/* Modal Ajustar Meta / Restricción Hídrica */}
-      {showAguaModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <form onSubmit={handleGuardarAgua} className="w-full max-w-md bg-white rounded-2xl p-6 flex flex-col gap-4 shadow-xl">
-            <h2 className="text-slate-900 text-lg font-bold">Individualizar meta de líquidos</h2>
-            <p className="text-slate-500 text-xs">
-              Activa la restricción hídrica en insuficiencia cardíaca, ERC avanzada, oliguria, diálisis o cirrosis para desactivar mensajes de aumento de agua.
+      {/* Modal Líquidos y Techos Nutricionales Individualizados */}
+      {showLimitesModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 overflow-y-auto">
+          <form onSubmit={handleGuardarLimites} className="w-full max-w-lg bg-white rounded-2xl p-6 flex flex-col gap-4 shadow-xl my-auto">
+            <h2 className="text-slate-900 text-lg font-bold">Metas hídricas y techos nutricionales</h2>
+            <p className="text-slate-600 text-xs">
+              Individualiza según enfermedad renal, insuficiencia cardíaca, diabetes o estado nutricional. No se aplican restricciones universales por infección urinaria.
             </p>
 
             <label className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2.5 cursor-pointer">
               <input
                 type="checkbox"
-                checked={aguaForm.restriccion}
-                onChange={(e) => setAguaForm({ ...aguaForm, restriccion: e.target.checked })}
+                checked={limitesForm.restriccion}
+                onChange={(e) => setLimitesForm({ ...limitesForm, restriccion: e.target.checked })}
                 className="w-4 h-4 accent-red-700"
               />
-              <span className="text-red-800 text-xs font-bold">Paciente con restricción hídrica prescrita</span>
+              <span className="text-red-800 text-xs font-bold">
+                Paciente con restricción hídrica prescrita (desactiva mensajes de aumento de líquidos)
+              </span>
             </label>
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-slate-800">
-                {aguaForm.restriccion ? 'Límite máximo diario (mL)' : 'Meta diaria individual (mL)'}
+                {limitesForm.restriccion ? 'Límite máximo diario de líquidos totales (mL/día)' : 'Meta diaria individual de líquidos (mL/día)'}
               </label>
-              <span className="text-[11px] text-slate-500">Convención: 1 vaso de referencia = 250 mL (ej. 1500, 1750, 2000).</span>
+              <span className="text-xs text-slate-500">Convención: 1 vaso de referencia = 250 mL.</span>
               <input
                 type="number"
                 min="300"
                 max="4000"
                 step="50"
-                value={aguaForm.metaMl}
-                onChange={(e) => setAguaForm({ ...aguaForm, metaMl: e.target.value })}
+                value={limitesForm.metaMl}
+                onChange={(e) => setLimitesForm({ ...limitesForm, metaMl: e.target.value })}
                 className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm"
               />
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold text-slate-800">Indicación clínica visible para el paciente</label>
-              <textarea
-                rows={3}
-                value={aguaForm.nota}
-                onChange={(e) => setAguaForm({ ...aguaForm, nota: e.target.value })}
+              <label className="text-xs font-semibold text-slate-800">Indicación hídrica visible al paciente</label>
+              <span className="text-xs text-slate-500">Especifica si el límite incluye todas las bebidas y sopas/otros líquidos.</span>
+              <input
+                type="text"
+                value={limitesForm.notaHidrica}
+                onChange={(e) => setLimitesForm({ ...limitesForm, notaHidrica: e.target.value })}
                 className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm"
               />
             </div>
 
-            <div className="flex justify-end gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-slate-100 pt-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-800">Sodio (unidades y periodo)</label>
+                <span className="text-[11px] text-slate-500">Ej. máx. 2.000 mg/día</span>
+                <input
+                  type="text"
+                  value={limitesForm.sodio}
+                  onChange={(e) => setLimitesForm({ ...limitesForm, sodio: e.target.value })}
+                  className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-800">Proteínas (unidades y periodo)</label>
+                <span className="text-[11px] text-slate-500">Ej. 0,8 g/kg/día</span>
+                <input
+                  type="text"
+                  value={limitesForm.proteinas}
+                  onChange={(e) => setLimitesForm({ ...limitesForm, proteinas: e.target.value })}
+                  className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-800">Carbohidratos (unidades)</label>
+                <span className="text-[11px] text-slate-500">Ej. según pauta diabetes</span>
+                <input
+                  type="text"
+                  value={limitesForm.carbohidratos}
+                  onChange={(e) => setLimitesForm({ ...limitesForm, carbohidratos: e.target.value })}
+                  className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-slate-800">Indicación clínica nutricional</label>
+              <span className="text-xs text-slate-500">Observación revisada por el equipo tratante o nutricionista.</span>
+              <textarea
+                rows={2}
+                value={limitesForm.indicacion}
+                onChange={(e) => setLimitesForm({ ...limitesForm, indicacion: e.target.value })}
+                className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => setShowAguaModal(false)}
+                onClick={() => setShowLimitesModal(false)}
                 className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                disabled={savingAgua}
-                className="px-5 py-2 bg-red-700 hover:bg-red-800 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                disabled={savingLimites}
+                className="px-5 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-semibold cursor-pointer"
               >
-                {savingAgua ? 'Guardando...' : 'Guardar indicación'}
+                {savingLimites ? 'Guardando...' : 'Guardar indicaciones'}
               </button>
             </div>
           </form>

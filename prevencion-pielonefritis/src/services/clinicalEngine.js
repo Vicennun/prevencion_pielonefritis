@@ -1,4 +1,5 @@
-// Motor clínico determinista validado para Cero Nefritis (sin IA ni puntajes sumativos para urgencia aguda)
+// Motor clínico determinista validado con el equipo médico (NefroGuía / Cero-Nefritis)
+// No diagnostica ni prescribe: ordena la prioridad de seguimiento y activa reglas directas de seguridad.
 
 export const UROCULTIVO_ESTADOS = [
   'No solicitado',
@@ -9,267 +10,360 @@ export const UROCULTIVO_ESTADOS = [
   'Muestra rechazada o resultado no interpretable',
 ];
 
-export const PRIORIDAD_RANK = {
-  URGENCIA_INMEDIATA: 1,
-  ROJO: 2,
-  AMARILLO: 3,
-  INFORMACION_INSUFICIENTE: 4,
-  VERDE: 5,
+export const PRIORIDAD_ORDER = {
+  URGENCIA_INMEDIATA: 0,
+  ROJO: 1,
+  AMARILLO: 2,
+  INFORMACION_INSUFICIENTE: 3,
+  VERDE: 4,
 };
 
 export const PRIORIDAD_META = {
   URGENCIA_INMEDIATA: {
     label: 'Urgencias inmediatas',
-    short: 'Urgencia',
-    color: 'red',
-    border: 'border-red-700',
-    bgSoft: 'bg-red-50',
+    short: 'Urgencias',
+    triageEsperado: 'Revisar ahora',
     badge: 'bg-red-700 text-white border-red-800',
+    border: 'border-red-600',
   },
   ROJO: {
     label: 'Valoración presencial hoy',
-    short: 'Rojo · Hoy',
-    color: 'red',
-    border: 'border-red-500',
-    bgSoft: 'bg-red-50',
-    badge: 'bg-red-100 text-red-700 border-red-200',
+    short: 'Revisar ahora',
+    triageEsperado: 'Revisar ahora',
+    badge: 'bg-red-100 text-red-800 border-red-300',
+    border: 'border-red-400',
   },
   AMARILLO: {
     label: 'Vigilar y contactar equipo',
-    short: 'Amarillo',
-    color: 'amber',
-    border: 'border-amber-500',
-    bgSoft: 'bg-amber-50',
-    badge: 'bg-amber-100 text-amber-800 border-amber-200',
+    short: 'Hoy',
+    triageEsperado: 'Hoy',
+    badge: 'bg-amber-100 text-amber-900 border-amber-300',
+    border: 'border-amber-400',
   },
   INFORMACION_INSUFICIENTE: {
     label: 'Información insuficiente',
-    short: 'Incompleto',
-    color: 'slate',
-    border: 'border-slate-400',
-    bgSoft: 'bg-slate-50',
+    short: 'Sin datos',
+    triageEsperado: 'Pendiente',
     badge: 'bg-slate-200 text-slate-700 border-slate-300',
+    border: 'border-slate-300',
   },
   VERDE: {
     label: 'Sin señales de alarma registradas',
-    short: 'Verde',
-    color: 'green',
-    border: 'border-green-500',
-    bgSoft: 'bg-green-50',
-    badge: 'bg-green-100 text-green-700 border-green-200',
+    short: 'Estable',
+    triageEsperado: 'Estable',
+    badge: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+    border: 'border-emerald-300',
   },
 };
 
-/**
- * Alerta metabólica paralela para glucosa capilar (no se interpreta como gravedad infecciosa).
- */
-export function evaluarAlertaMetabolica({ glucosa, confusionODeterioro = false, vomitosPersistentes = false }) {
-  if (glucosa === null || glucosa === undefined || glucosa === '') {
-    return { nivel: 'NINGUNA', mensaje: null };
+export function formatearHidratacion(ml) {
+  if (ml === null || ml === undefined || ml === '' || Number.isNaN(Number(ml))) {
+    return 'Sin registro';
   }
-  const g = Number(glucosa);
-  if (Number.isNaN(g)) return { nivel: 'NINGUNA', mensaje: null };
+  const numMl = Number(ml);
+  const litros = (numMl / 1000).toLocaleString('es-CL', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 2,
+  });
+  const vasos = Math.round((numMl / 250) * 10) / 10;
+  return `${numMl.toLocaleString('es-CL')} mL (${litros} L · aprox. ${vasos} vasos de 250 mL)`;
+}
 
-  if (g < 70) {
-    if (confusionODeterioro || vomitosPersistentes) {
+export function ordenarPorPrioridadClinica(lista = [], getNivel = (item) => item.nivel_semaforo) {
+  return [...lista].sort((a, b) => {
+    const pa = PRIORIDAD_ORDER[getNivel(a)] ?? 99;
+    const pb = PRIORIDAD_ORDER[getNivel(b)] ?? 99;
+    return pa - pb;
+  });
+}
+
+export function calcularRecurrenciaDesdeEpisodios(episodios = []) {
+  const ahora = Date.now();
+  const dias6m = 183 * 24 * 60 * 60 * 1000;
+  const dias12m = 365 * 24 * 60 * 60 * 1000;
+
+  let confirmados6m = 0;
+  let confirmados12m = 0;
+
+  episodios.forEach((ep) => {
+    if (ep.tipo !== 'confirmado' || !ep.fecha) return;
+    const ts = new Date(`${ep.fecha}T12:00:00`).getTime();
+    if (Number.isNaN(ts)) return;
+    const diff = ahora - ts;
+    if (diff >= 0 && diff <= dias6m) confirmados6m += 1;
+    if (diff >= 0 && diff <= dias12m) confirmados12m += 1;
+  });
+
+  return {
+    confirmados6m,
+    confirmados12m,
+    esRecurrente: confirmados6m >= 2 || confirmados12m >= 3,
+  };
+}
+
+export function evaluarAlertaMetabolica(datos = {}) {
+  const glucosa =
+    datos.glucosaCapilar !== '' && datos.glucosaCapilar !== null && datos.glucosaCapilar !== undefined
+      ? Number(datos.glucosaCapilar)
+      : null;
+
+  const sintomasCetoacidosis = Boolean(
+    datos.vomitosPersistentes || datos.dolorAbdominal || datos.desmayoODisnea || datos.confusionAguda || datos.confusionODeterioro
+  );
+  const cetonasElevadas = Boolean(datos.cetonasElevadas);
+
+  if (glucosa === null || Number.isNaN(glucosa)) {
+    return { alertaMetabolica: 'NINGUNA', mensajeMetabolico: null };
+  }
+
+  if (glucosa < 70) {
+    if (datos.confusionAguda || datos.confusionODeterioro || datos.desmayoODisnea || datos.vomitosPersistentes) {
       return {
-        nivel: 'URGENCIA_METABOLICA',
-        mensaje: `Hipoglucemia crítica (${g} mg/dL) con signos de alarma: acudir a urgencias inmediatas.`,
+        alertaMetabolica: 'URGENCIA_METABOLICA',
+        mensajeMetabolico: `Glucosa baja (${glucosa} mg/dL) con síntomas neurológicos o imposibilidad para tragar: acudir de inmediato a urgencias.`,
       };
     }
     return {
-      nivel: 'HIPOGLUCEMIA',
-      mensaje: `Glucosa < 70 mg/dL (${g} mg/dL): activar de inmediato el plan individual de hipoglucemia.`,
+      alertaMetabolica: 'HIPOGLUCEMIA',
+      mensajeMetabolico: `Glucosa capilar en ${glucosa} mg/dL (<70 mg/dL): seguir de inmediato el plan individual de hipoglucemia y avisar al equipo tratante. Si aparece confusión, convulsiones o imposibilidad para tragar, acudir a urgencias.`,
     };
   }
 
-  if (g >= 300 || (g >= 250 && vomitosPersistentes)) {
+  if (glucosa >= 300 || cetonasElevadas || (glucosa >= 250 && sintomasCetoacidosis)) {
     return {
-      nivel: 'URGENCIA_METABOLICA',
-      mensaje: `Glucosa elevada (${g} mg/dL)${vomitosPersistentes ? ' con vómitos persistentes' : ''}: riesgo de descompensación/cetoacidosis, requiere atención urgente.`,
+      alertaMetabolica: 'URGENCIA_METABOLICA',
+      mensajeMetabolico: `Glucosa elevada (${glucosa} mg/dL)${sintomasCetoacidosis ? ' con síntomas de posible descompensación/cetoacidosis' : ' sostenida ≥300 mg/dL'}: requiere atención urgente y valoración metabólica inmediata.`,
     };
   }
 
-  if (g >= 250) {
+  if (glucosa >= 250) {
     return {
-      nivel: 'DIAS_ENFERMEDAD',
-      mensaje: `Glucosa ≥ 250 mg/dL (${g} mg/dL) durante enfermedad: activar plan de días de enfermedad, valorar cetonas y contactar al equipo si persiste.`,
+      alertaMetabolica: 'HIPERGLUCEMIA_DIAS_ENFERMEDAD',
+      mensajeMetabolico: `Glucosa capilar en ${glucosa} mg/dL (≥250 mg/dL): activar el plan individual de días de enfermedad, valorar cetonas si está indicado y contactar al equipo de salud hoy si persiste.`,
     };
   }
 
-  return { nivel: 'NINGUNA', mensaje: null };
+  return { alertaMetabolica: 'NINGUNA', mensajeMetabolico: null };
 }
 
-/**
- * Evalúa el Semáforo Clínico Determinista (usado en Check-in Diario y Evaluación Inicial).
- * Nota: < 6 vasos de agua y náuseas aisladas NO disparan alerta roja/amarilla por sí solas.
- */
-export function evaluarSemaforoClinico(datos = {}, perfil = {}) {
-  const temp = datos.temperatura !== undefined && datos.temperatura !== '' && datos.temperatura !== null
-    ? Number(datos.temperatura)
-    : null;
-  const dolor = datos.dolorLumbar !== undefined && datos.dolorLumbar !== '' && datos.dolorLumbar !== null
-    ? Number(datos.dolorLumbar)
-    : null;
+export function evaluarSemaforoClinico(datos = {}, paciente = {}) {
+  const temp =
+    datos.temperatura !== '' && datos.temperatura !== null && datos.temperatura !== undefined
+      ? Number(datos.temperatura)
+      : null;
+  const dolor =
+    datos.dolorLumbar !== '' && datos.dolorLumbar !== null && datos.dolorLumbar !== undefined
+      ? Number(datos.dolorLumbar)
+      : null;
 
-  const confusion = Boolean(datos.confusionODeterioro || datos.confusionAguda || datos.desmayoODisnea || datos.hipotensionDeterioro);
-  const obstruccionInfectada = Boolean(datos.obstruccionSospechada) && (temp >= 37.5 || Boolean(datos.sintomasUrinarios) || Boolean(datos.dolorFlanco));
-  const coagulosRetencion = Boolean(datos.coagulosRetencion);
-  const fiebre = temp !== null && temp >= 38.0;
-  const febricula = temp !== null && temp >= 37.5 && temp < 38.0;
-  const dolorAlto = dolor !== null && dolor >= 7;
-  const dolorModerado = dolor !== null && dolor >= 4 && dolor < 7;
-  const escalofrios = Boolean(datos.escalofriosTemblor);
-  const vomitosPersistentes = Boolean(datos.vomitosPersistentes) || datos.toleraLiquidosMedicamentos === false;
-  const dolorFlancoNuevo = Boolean(datos.dolorFlanco);
-  const sangreOrina = Boolean(datos.sangreOrina);
-  const sintomasUrinarios = Boolean(datos.sintomasUrinarios);
-  const sinMejoria48_72h = Number(datos.horasSinMejoria || 0) >= 48 && (febricula || fiebre || dolorModerado || dolorAlto || sintomasUrinarios);
-  const bajaAdherencia = (datos.adherenciaPorcentaje !== undefined && Number(datos.adherenciaPorcentaje) < 80) || Number(datos.dosisOmitidas || 0) > 0;
+  const antTexto = (paciente.antecedentes || []).join(' ').toLowerCase();
+  const tieneEmbarazo = Boolean(datos.embarazo || paciente.embarazo || antTexto.includes('embarazo'));
+  const tieneDiabetes = Boolean(datos.diabetes || antTexto.includes('diabetes'));
+  const tieneErc = Boolean(datos.enfermedadRenal || antTexto.includes('enfermedad renal'));
+  const tieneInm = Boolean(datos.inmunosupresion || antTexto.includes('inmunosupresi') || antTexto.includes('trasplante'));
+  const tieneSonda = Boolean(datos.sondaUrinaria || antTexto.includes('sonda'));
+  const tieneLitiasis = Boolean(datos.litiasisAntecedente || antTexto.includes('cálculo') || antTexto.includes('litiasis'));
+  const tieneObstruccion = Boolean(datos.obstruccionSospechada || antTexto.includes('obstrucción'));
+  const tieneInstrumentacion = Boolean(datos.instrumentacionReciente || antTexto.includes('instrumentación'));
 
-  const embarazo = Boolean(datos.embarazo ?? perfil.embarazo);
-  const diabetes = Boolean(datos.diabetes ?? perfil.antecedentes?.some(a => a.toLowerCase().includes('diabetes')));
-  const inmunosupresion = Boolean(datos.inmunosupresion ?? perfil.antecedentes?.some(a => a.toLowerCase().includes('inmunosupresi')));
-  const instrumentacion = Boolean(datos.instrumentacionReciente ?? perfil.antecedentes?.some(a => a.toLowerCase().includes('instrumentaci')));
-  const esRecurrente = Boolean(datos.esRecurrente) || Number(perfil.itu_6_meses || 0) >= 2 || Number(perfil.itu_12_meses || 0) >= 3;
+  const itu6m = Number(datos.ituConfirmadas6m ?? paciente.itu6Meses ?? paciente.itu_6_meses ?? 0);
+  const itu12m = Number(datos.ituConfirmadas12m ?? paciente.itu12Meses ?? paciente.itu_12_meses ?? 0);
+  const esRecurrente = Boolean(datos.esRecurrente || itu6m >= 2 || itu12m >= 3);
 
-  const metabolica = evaluarAlertaMetabolica({
-    glucosa: datos.glucosaCapilar,
-    confusionODeterioro: confusion,
-    vomitosPersistentes,
-  });
+  // Contexto de IVU: en seguimiento activo se asume contexto urinario;
+  // en autochequeo o evaluación inicial (requiereContextoItu = true), la fiebre aislada requiere contexto urinario para marcar sospecha renal.
+  const tieneContextoItu =
+    !datos.requiereContextoItu ||
+    Boolean(
+      datos.enSeguimientoItu ||
+        datos.sintomasUrinarios ||
+        datos.dolorFlanco ||
+        datos.sangreOrina ||
+        datos.coagulosRetencion ||
+        datos.disminucionOrina ||
+        esRecurrente
+    );
 
-  // Alerta de valoración de estudio de imagen (nunca orden automática)
-  const alertaImagen =
-    obstruccionInfectada ||
-    sinMejoria48_72h ||
-    ((fiebre || dolorAlto) && (diabetes || inmunosupresion || embarazo));
+  const fiebreEnContextoItu = temp !== null && temp >= 38.0 && tieneContextoItu;
+  const fiebreAisladaSinContexto = temp !== null && temp >= 38.0 && !tieneContextoItu;
 
-  let mensajeImagen = null;
-  if (alertaImagen) {
-    mensajeImagen = embarazo
-      ? 'Valorar necesidad de estudio de imagen según criterio clínico (en embarazo preferir ecografía; evitar radiación).'
-      : 'Evolución o factores de riesgo ameritan valorar necesidad de estudio de imagen (ecografía o TAC según criterio profesional).';
+  const toleraViaOral = datos.toleraLiquidosMedicamentos !== false && !datos.vomitosPersistentes;
+  const tieneSintomasSistemicos = Boolean(
+    fiebreEnContextoItu || datos.escalofriosTemblor || datos.dolorFlanco || datos.vomitosPersistentes
+  );
+
+  // 1) Evaluación metabólica paralela
+  const { alertaMetabolica, mensajeMetabolico } = evaluarAlertaMetabolica(datos);
+
+  // 2) Triggers de URGENCIA INMEDIATA
+  const triggersUrgencia = [];
+  if (datos.confusionAguda || datos.confusionODeterioro) {
+    triggersUrgencia.push('Confusión o somnolencia de nueva aparición / deterioro agudo');
+  }
+  if (datos.desmayoODisnea) {
+    triggersUrgencia.push('Desmayo, dificultad respiratoria, hipotensión o deterioro rápido');
+  }
+  if (datos.coagulosRetencion) {
+    triggersUrgencia.push('Sangre en orina con coágulos o dificultad para orinar (retención)');
+  }
+  if (tieneObstruccion && (tieneSintomasSistemicos || (dolor !== null && dolor >= 7))) {
+    triggersUrgencia.push('Sospecha de obstrucción urinaria con infección o dolor intenso');
+  }
+  if (temp !== null && temp >= 38.0 && datos.vomitosPersistentes) {
+    triggersUrgencia.push('Fiebre ≥ 38 °C junto con vómitos persistentes / intolerancia oral');
+  }
+  if (tieneEmbarazo && tieneSintomasSistemicos) {
+    triggersUrgencia.push('Embarazo con signos de sospecha de pielonefritis (valoración obstétrica/urgente)');
   }
 
-  const triggers = [];
+  // 3) Triggers de ROJO (valoración presencial el mismo día)
+  const triggersRojo = [];
+  if (fiebreEnContextoItu) {
+    triggersRojo.push(`Fiebre (${temp} °C ≥ 38.0 °C) en contexto de IVU o seguimiento urinario`);
+  }
+  if (datos.escalofriosTemblor) triggersRojo.push('Escalofríos intensos con temblor');
+  if (datos.dolorFlanco) triggersRojo.push('Dolor nuevo o creciente en costado o región lumbar');
+  if (dolor !== null && dolor >= 7) triggersRojo.push(`Dolor intenso (${dolor}/10)`);
+  if (!toleraViaOral) triggersRojo.push('Vómitos persistentes o incapacidad para hidratarse / tomar tratamiento');
+  if (datos.disminucionOrina) triggersRojo.push('Disminución importante de la cantidad de orina (diuresis)');
+  if (Number(datos.horasSinMejoria || 0) >= 48) {
+    triggersRojo.push('Sin mejoría tras 48–72 horas de tratamiento indicado');
+  }
 
-  // 1. URGENCIA INMEDIATA
-  if (confusion) triggers.push('Confusión nueva, desmayo, dificultad respiratoria o deterioro rápido');
-  if (obstruccionInfectada) triggers.push('Sospecha de obstrucción urinaria con infección');
-  if (coagulosRetencion) triggers.push('Sangre en orina con coágulos o dificultad para orinar');
-  if (metabolica.nivel === 'URGENCIA_METABOLICA') triggers.push('Urgencia metabólica (glucosa crítica / cetoacidosis)');
+  // 4) Triggers de AMARILLO (vigilar, registrar y contactar al equipo de salud)
+  const triggersAmarillo = [];
+  if (fiebreAisladaSinContexto) {
+    triggersAmarillo.push(`Fiebre aislada (${temp} °C) sin síntomas urinarios ni contexto de IVU activa`);
+  }
+  if (temp !== null && temp >= 37.5 && temp < 38.0) triggersAmarillo.push(`Febrícula (${temp} °C)`);
+  if (dolor !== null && dolor >= 4 && dolor <= 6) triggersAmarillo.push(`Dolor moderado (${dolor}/10)`);
+  if (datos.sintomasUrinarios) triggersAmarillo.push('Síntomas urinarios bajos nuevos o persistentes');
+  if (datos.sangreOrina && !datos.coagulosRetencion) {
+    triggersAmarillo.push('Sangre visible en orina (requiere valoración pronta)');
+  }
+  if (tieneEmbarazo && datos.sintomasUrinarios && !tieneSintomasSistemicos) {
+    triggersAmarillo.push('Embarazo con síntomas urinarios (valoración pronta)');
+  }
+  if (tieneInstrumentacion && (datos.sintomasUrinarios || (dolor !== null && dolor >= 4) || (temp !== null && temp >= 37.5))) {
+    triggersAmarillo.push('Síntomas tras instrumentación o cirugía urinaria reciente');
+  }
+  if (tieneLitiasis && ((dolor !== null && dolor >= 2) || datos.dolorTipoColico)) {
+    triggersAmarillo.push('Antecedente de litiasis con dolor o molestia (descartar obstrucción)');
+  }
+  if (esRecurrente && triggersRojo.length === 0 && triggersUrgencia.length === 0) {
+    triggersAmarillo.push(`Infecciones urinarias recurrentes (${itu6m} en 6m / ${itu12m} en 12m): seguimiento preventivo`);
+  }
+  if (
+    (datos.adherenciaPorcentaje !== undefined && datos.adherenciaPorcentaje !== null && Number(datos.adherenciaPorcentaje) < 80) ||
+    Number(datos.dosisOmitidas || 0) > 0 ||
+    datos.efectosAdversos
+  ) {
+    triggersAmarillo.push('Dificultades de adherencia, dosis omitidas o efectos adversos (contacto de apoyo)');
+  }
+  if (alertaMetabolica === 'HIPERGLUCEMIA_DIAS_ENFERMEDAD' || alertaMetabolica === 'HIPOGLUCEMIA') {
+    triggersAmarillo.push('Alerta metabólica de glucosa que requiere contacto hoy');
+  }
 
-  if (triggers.length > 0) {
+  // Modificadores de contexto (NO suman puntos automáticos para urgencia por sí solos)
+  const modificadores = [];
+  if (tieneDiabetes) modificadores.push('Antecedente: Diabetes mellitus');
+  if (tieneErc) modificadores.push('Antecedente: Enfermedad renal crónica');
+  if (tieneInm) modificadores.push('Antecedente: Inmunosupresión o trasplante');
+  if (tieneSonda) modificadores.push('Dispositivo: Sonda urinaria');
+
+  // 5) Valoración de estudio de imagen (solo sugerencia para criterio profesional)
+  const razonesImagen = [];
+  if (Number(datos.horasSinMejoria || 0) >= 48) razonesImagen.push('sin mejoría en 48–72 horas');
+  if (tieneObstruccion || (tieneLitiasis && tieneSintomasSistemicos)) razonesImagen.push('sospecha de litiasis u obstrucción');
+  if (datos.disminucionOrina) razonesImagen.push('disminución de diuresis / valorar función renal');
+  if ((tieneDiabetes || tieneInm) && tieneSintomasSistemicos) {
+    razonesImagen.push('pielonefritis con diabetes o inmunosupresión (valorar imagen temprana según criterio clínico)');
+  }
+
+  const alertaReevaluacionImagen = razonesImagen.length > 0;
+  const mensajeReevaluacionImagen = alertaReevaluacionImagen
+    ? `Sugerencia para criterio profesional: valorar estudio de imagen (${razonesImagen.join('; ')}). En embarazo preferir ecografía o resonancia según indicación clínica.`
+    : null;
+
+  const faltanEsenciales =
+    temp === null &&
+    dolor === null &&
+    triggersUrgencia.length === 0 &&
+    triggersRojo.length === 0 &&
+    triggersAmarillo.length === 0;
+
+  if (triggersUrgencia.length > 0 || alertaMetabolica === 'URGENCIA_METABOLICA') {
+    const todos = [...triggersUrgencia];
+    if (alertaMetabolica === 'URGENCIA_METABOLICA') todos.push('Alerta metabólica urgente de glucosa');
     return {
       nivelSemaforo: 'URGENCIA_INMEDIATA',
-      tituloSemaforo: 'Urgencias inmediatas',
-      mensajeProtocolo: 'Se detectaron signos de deterioro grave o urgencia urológica/metabólica. Acudir a urgencias inmediatas sin esperar consulta programada (la ausencia de fiebre no descarta gravedad).',
-      triggersActivos: triggers,
-      alertaMetabolica: metabolica.nivel,
-      mensajeMetabolico: metabolica.mensaje,
-      alertaReevaluacionImagen: alertaImagen,
-      mensajeReevaluacionImagen: mensajeImagen,
+      tituloSemaforo: 'Atención de urgencias recomendada',
+      mensajeProtocolo:
+        'Tus respuestas muestran señales que requieren atención inmediata en un servicio de urgencias o llamar a emergencias (131 en Chile / 911 en México), sin esperar a que aparezcan otros signos. Esta herramienta no realiza diagnósticos.',
+      triggersActivos: [...todos, ...triggersRojo, ...modificadores],
+      alertaMetabolica,
+      mensajeMetabolico,
+      alertaReevaluacionImagen,
+      mensajeReevaluacionImagen,
     };
   }
 
-  // 2. ROJO — Valoración presencial el mismo día
-  if (fiebre) triggers.push(`Fiebre ≥ 38 °C (${temp} °C)`);
-  if (escalofrios) triggers.push('Escalofríos intensos con temblor');
-  if (dolorAlto) triggers.push(`Dolor intenso ≥ 7/10 (${dolor}/10)`);
-  if (dolorFlancoNuevo && !dolorAlto) triggers.push('Dolor nuevo o creciente en flanco/región lumbar');
-  if (vomitosPersistentes) triggers.push('Vómitos persistentes o incapacidad para hidratarse/medicarse');
-  if (sinMejoria48_72h) triggers.push('Falta de mejoría en 48–72 horas');
-  if (embarazo && (fiebre || dolorFlancoNuevo || dolorModerado || dolorAlto || vomitosPersistentes)) {
-    triggers.push('Embarazo con sospecha de pielonefritis (prioridad obstétrica)');
-  }
-
-  if (triggers.length > 0) {
+  if (triggersRojo.length > 0) {
     return {
       nivelSemaforo: 'ROJO',
-      tituloSemaforo: embarazo ? 'Evaluación presencial urgente (Obstétrica)' : 'Valoración presencial el mismo día',
-      mensajeProtocolo: 'Tus respuestas indican que necesitas valoración profesional presencial hoy mismo. Esto no es un diagnóstico; si aparece confusión, desmayo, dificultad respiratoria o empeoras rápido, acude a urgencias.',
-      triggersActivos: triggers,
-      alertaMetabolica: metabolica.nivel,
-      mensajeMetabolico: metabolica.mensaje,
-      alertaReevaluacionImagen: alertaImagen,
-      mensajeReevaluacionImagen: mensajeImagen,
+      tituloSemaforo: 'Valoración profesional el mismo día',
+      mensajeProtocolo:
+        'Tus respuestas indican que necesitas valoración presencial con un profesional de la salud hoy. Esto no es un diagnóstico. Si aparece confusión, desmayo, dificultad respiratoria o empeoras rápido, acude a urgencias o llama a emergencias.',
+      triggersActivos: [...triggersRojo, ...modificadores],
+      alertaMetabolica,
+      mensajeMetabolico,
+      alertaReevaluacionImagen,
+      mensajeReevaluacionImagen,
     };
   }
 
-  // 3. INFORMACIÓN INSUFICIENTE (si faltan campos esenciales: temperatura y dolor)
-  const faltanEsenciales = temp === null || dolor === null;
-  if (faltanEsenciales && !sintomasUrinarios && !sangreOrina && !bajaAdherencia) {
+  if (triggersAmarillo.length > 0) {
+    const mensajeAmarillo = fiebreAisladaSinContexto && triggersAmarillo.length === 1
+      ? `Registraste fiebre (${temp} °C) sin síntomas urinarios ni contexto de infección urinaria activa. Por sí sola no apunta a pielonefritis, pero conviene consultar con un profesional para evaluar su causa y buscar valoración el mismo día si aparecen ardor al orinar, dolor en costado/espalda baja, escalofríos o empeoramiento.`
+      : 'Tus respuestas sugieren vigilar tu evolución y contactar a tu equipo de salud para orientar el plan o seguimiento preventivo. Si aparece fiebre ≥ 38 °C con síntomas urinarios, escalofríos, dolor en costado/espalda baja, vómitos persistentes o empeoramiento, busca valoración presencial el mismo día.';
+
+    return {
+      nivelSemaforo: 'AMARILLO',
+      tituloSemaforo: fiebreAisladaSinContexto && triggersAmarillo.length === 1
+        ? 'Fiebre aislada sin signos urinarios'
+        : 'Vigilar evolución y contactar al equipo',
+      mensajeProtocolo: mensajeAmarillo,
+      triggersActivos: [...triggersAmarillo, ...modificadores],
+      alertaMetabolica,
+      mensajeMetabolico,
+      alertaReevaluacionImagen,
+      mensajeReevaluacionImagen,
+    };
+  }
+
+  if (faltanEsenciales) {
     return {
       nivelSemaforo: 'INFORMACION_INSUFICIENTE',
-      tituloSemaforo: 'Información insuficiente',
-      mensajeProtocolo: 'Faltan campos esenciales (temperatura y escala de dolor) para clasificar el seguimiento. No se asigna nivel verde sin datos completos.',
-      triggersActivos: ['Faltan campos esenciales del registro'],
-      alertaMetabolica: metabolica.nivel,
-      mensajeMetabolico: metabolica.mensaje,
+      tituloSemaforo: 'Información insuficiente para orientar',
+      mensajeProtocolo:
+        'Faltan mediciones esenciales (temperatura y nivel de dolor). Completa tu registro para orientar el seguimiento; la falta de datos no equivale a estar sin riesgo.',
+      triggersActivos: ['Faltan mediciones esenciales (temperatura o dolor)'],
+      alertaMetabolica,
+      mensajeMetabolico,
       alertaReevaluacionImagen: false,
       mensajeReevaluacionImagen: null,
     };
   }
 
-  // 4. AMARILLO — Vigilar, registrar y contactar equipo
-  if (febricula) triggers.push(`Temperatura 37.5–37.9 °C (${temp} °C)`);
-  if (dolorModerado) triggers.push(`Dolor moderado 4–6/10 (${dolor}/10)`);
-  if (sangreOrina) triggers.push('Sangre visible en orina (requiere valoración pronta)');
-  if (embarazo && sintomasUrinarios) triggers.push('Embarazo con síntomas urinarios (valoración pronta)');
-  if (instrumentacion && (sintomasUrinarios || febricula || dolorModerado)) triggers.push('Instrumentación urinaria reciente con síntomas');
-  if (sintomasUrinarios) triggers.push('Síntomas urinarios nuevos o persistentes sin criterios rojos');
-  if (bajaAdherencia) triggers.push('Dosis omitidas o dificultad de adherencia (requiere apoyo clínico)');
-  if (metabolica.nivel === 'DIAS_ENFERMEDAD' || metabolica.nivel === 'HIPOGLUCEMIA') {
-    triggers.push('Alerta metabólica paralela de glucosa');
-  }
-  if (esRecurrente && triggers.length === 0) {
-    triggers.push('Recurrencia documentada (≥ 2 en 6m o ≥ 3 en 12m): seguimiento programado');
-  }
-
-  if (triggers.length > 0) {
-    return {
-      nivelSemaforo: 'AMARILLO',
-      tituloSemaforo: 'Vigilar, registrar y contactar equipo',
-      mensajeProtocolo: 'Registra tu evolución y contacta al equipo de salud. Si aparece fiebre ≥ 38 °C, escalofríos intensos, dolor en flanco creciente o vómitos persistentes, busca valoración el mismo día.',
-      triggersActivos: triggers,
-      alertaMetabolica: metabolica.nivel,
-      mensajeMetabolico: metabolica.mensaje,
-      alertaReevaluacionImagen: alertaImagen,
-      mensajeReevaluacionImagen: mensajeImagen,
-    };
-  }
-
-  // 5. VERDE — Solo cuando campos esenciales están completos y sin criterios de alarma
   return {
     nivelSemaforo: 'VERDE',
     tituloSemaforo: 'Sin señales de alarma registradas',
-    mensajeProtocolo: 'Sin señales de alarma registradas en tu último control. Continúa tu seguimiento y el tratamiento indicado (este resultado no confirma curación ni descarta infección).',
-    triggersActivos: ['Campos esenciales completos', 'Sin señales de alarma registradas'],
-    alertaMetabolica: metabolica.nivel,
-    mensajeMetabolico: metabolica.mensaje,
+    mensajeProtocolo:
+      'No se registran señales de alarma en este chequeo. Continúa tu seguimiento y el tratamiento exactamente como fue indicado; este resultado no confirma curación ni descarta infección.',
+    triggersActivos: modificadores.length ? modificadores : ['Campos esenciales completos sin criterios de alarma'],
+    alertaMetabolica,
+    mensajeMetabolico,
     alertaReevaluacionImagen: false,
     mensajeReevaluacionImagen: null,
   };
-}
-
-/**
- * Ordena pacientes/seguimientos según prioridad clínica real.
- */
-export function ordenarPorPrioridadClinica(lista, selectorNivel = (item) => item.nivel_semaforo) {
-  return [...lista].sort((a, b) => {
-    const rankA = PRIORIDAD_RANK[selectorNivel(a)] ?? 99;
-    const rankB = PRIORIDAD_RANK[selectorNivel(b)] ?? 99;
-    return rankA - rankB;
-  });
-}
-
-/**
- * Helper de hidratación: 1 vaso de referencia = 250 mL.
- */
-export function formatearHidratacion(ml) {
-  if (ml === null || ml === undefined) return 'Sin registro';
-  const litros = (ml / 1000).toFixed(2).replace('.', ',');
-  const vasos = Math.round((ml / 250) * 10) / 10;
-  return `${ml} mL (${litros} L · ~${vasos} vasos)`;
 }
